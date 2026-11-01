@@ -18,6 +18,8 @@ jobs:
         run: dotnet workload install wasm-tools --skip-manifest-update
       - name: Build native command-line engine
         run: dotnet build cad/CadBridge.csproj -c Release -o .out/cad
+      - name: Test native source edits and round trips
+        run: dotnet run --project cad-tests/SparkWorld.CadTests.csproj -c Release
       - name: Build browser CAD engine
         run: dotnet publish cad-browser/SparkWorld.CadBrowser.csproj -c Release -o .out/browser
       - name: Report output sizes
