@@ -7,11 +7,13 @@ process.env.TEMP=process.env.TMP=path.join(root,'work/temp');
 const report={status:'RUNNING',checks:[],errors:[]};let browser;
 (async()=>{
  await fs.writeFile(path.join(root,'tests/browser-engine.json'),JSON.stringify(report));
+ let assets=null;if(process.env.SPARK_ENGINE_ARTIFACT){const raw=require('node:child_process').execFileSync('python',['-B',path.join(__dirname,'../tools/load-engine-artifact.py'),process.env.SPARK_ENGINE_ARTIFACT],{maxBuffer:96*1024*1024,windowsHide:true});assets=new Map(Object.entries(JSON.parse(raw.toString())).map(([name,data])=>[name,Buffer.from(data,'base64')]));report.engineArtifact=process.env.SPARK_ENGINE_ARTIFACT;}
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH||undefined,args:['--disable-gpu-shader-disk-cache','--disk-cache-size=1048576','--disable-background-networking']});
  const page=await browser.newPage({viewport:{width:1600,height:1000}});page.on('pageerror',e=>report.errors.push(e.message));page.on('console',m=>{require('node:fs').writeFileSync(path.join(root,'tests/browser-engine-progress.txt'),new Date().toISOString()+' '+m.type()+': '+m.text().slice(0,400));console.log(m.type()+': '+m.text().slice(0,400));if(m.type()==='error')report.errors.push(m.text().slice(0,400));});page.on('requestfailed',r=>console.log('REQUEST FAILED '+r.url()+' '+r.failure()?.errorText));
  // Local read-only mapping uses exactly the files shipped under /engine on Pages.
  if(process.env.SPARK_TEST_MAP_ENGINE)await page.route('**/engine/**',async route=>{
   const relative=new URL(route.request().url()).pathname.split('/engine/')[1];
+  if(assets){const body=assets.get(decodeURIComponent(relative));if(!body)return route.fulfill({status:404,body:'Missing compiled asset'});return route.fulfill({body,contentType:relative.endsWith('.wasm')?'application/wasm':'text/javascript'});}
   const file=path.resolve(root,'build/web/engine',decodeURIComponent(relative));
   if(!file.startsWith(path.resolve(root,'build/web/engine')+path.sep))return route.abort();
   await route.fulfill({path:file,contentType:file.endsWith('.wasm')?'application/wasm':file.endsWith('.js')?'text/javascript':'application/octet-stream'});

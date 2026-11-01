@@ -59,7 +59,7 @@ sealed class SparkWindow:Window {
  async Task Receive(string json){string id="";try{
   using var parsed=JsonDocument.Parse(json);var root=parsed.RootElement;id=root.GetProperty("id").GetString()??"";string method=root.GetProperty("method").GetString()??"";var a=root.GetProperty("args");object? result;
   switch(method){
-   case "app.info":result=new{name="SparkWorld",creator="Aris",version="0.2.0",cad=true,mode="desktop",decoder="ACadSharp 3.6.51 · native Windows"};break;
+   case "app.info":result=new{name="SparkWorld",creator="Aris",version="0.2.1",cad=true,mode="desktop",decoder="ACadSharp 3.6.51 · native Windows"};break;
    case "qa.pointer":if(!qa)throw new InvalidOperationException("QA is disabled.");await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",a.GetRawText());result=true;break;
    case "window.minimize":WindowState=WindowState.Minimized;result=true;break;
    case "window.maximize":WindowState=WindowState==WindowState.Maximized?WindowState.Normal:WindowState.Maximized;result=true;break;

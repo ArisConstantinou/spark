@@ -46,6 +46,13 @@
   const moved=roundtrip.items.find(i=>i.id===target.id)||roundtrip.items.find(i=>i.owner===owner&&i.kind===target.kind);
   check(!!moved&&Math.abs(moved.bounds[0]-before[0]-dx)<.1&&Math.abs(moved.bounds[1]-before[1]-dy)<.1,'Real DWG source movement survives native export');
   check(roundtrip.items.length===doc.cad.items.length,'Real DWG display coverage preserved');
+  const groups=new Map(),cases=new Map();for(const item of doc.cad.items){if(!groups.has(item.owner))groups.set(item.owner,[]);groups.get(item.owner).push(item);}
+  for(const object of doc.cad.sourceObjects||[])if(groups.has(object.handle)){const type=object.type==='Hatch'?'Hatch '+(groups.get(object.handle).some(i=>i.patterns?.length)?'patterned':'solid'):object.type;if(!cases.has(type))cases.set(type,object.handle);}
+  const allMoves=Object.fromEntries([...cases.values()].map(owner=>[owner,{dx:doc.cad.factor*2,dy:doc.cad.factor*3}]));
+  const allBytes=await platform.exportCad({factor:doc.cad.factor,original:doc.cad.original,originalFormat:'dwg',cadMoves:allMoves,segments:[],labels:[]},'dwg'),allScene=await platform.importCad(allBytes,'dwg');
+  const union=items=>[Math.min(...items.map(i=>i.bounds[0])),Math.min(...items.map(i=>i.bounds[1])),Math.max(...items.map(i=>i.bounds[2])),Math.max(...items.map(i=>i.bounds[3]))];
+  for(const [type,handle]of cases){const old=groups.get(handle),next=allScene.items.filter(i=>i.owner===handle),a=union(old),b=union(next),move=allMoves[handle];check(next.length===old.length&&a.every((v,n)=>Math.abs(b[n]-v-(n%2?move.dy:move.dx))<.1),type+' native Windows move preserves geometry');for(let n=0;n<old.length;n++)for(let k=0;k<(old[n].patterns?.length||0);k++){const p=old[n].patterns[k],q=next[n].patterns[k];check(Math.abs(q.basePoint[0]-p.basePoint[0]-move.dx)<.1&&Math.abs(q.basePoint[1]-p.basePoint[1]-move.dy)<.1&&q.step.every((v,i)=>Math.abs(v-p.step[i])<.001),type+' native hatch origin and spacing preserved');}}
+  check(allScene.items.length===doc.cad.items.length,'All-type Windows edit preserves source coverage');
   // Add and move an electrical point in the actual viewport using its existing tools.
   $('#fit-cad-selection')?.click();$('#dialog-close').click();r=$('#canvas').getBoundingClientRect();
   document.querySelector('[data-tool="place"]').click();x=r.x+r.width*.55;y=r.y+r.height*.5;

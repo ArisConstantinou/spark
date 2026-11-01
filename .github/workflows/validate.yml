@@ -21,7 +21,12 @@ jobs:
       - name: Build native command-line engine
         run: dotnet build cad/CadBridge.csproj -c Release -o .out/cad
       - name: Test native source edits and round trips
-        run: dotnet run --project cad-tests/SparkWorld.CadTests.csproj -c Release
+        run: dotnet run --project cad-tests/SparkWorld.CadTests.csproj -c Release -- --fixture .out/cad-fixture.dwg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cad-fixtures
+          path: .out/cad-fixture.dwg
+          retention-days: 3
       - name: Build browser CAD engine
         run: dotnet publish cad-browser/SparkWorld.CadBrowser.csproj -c Release -o .out/browser
       - name: Report output sizes

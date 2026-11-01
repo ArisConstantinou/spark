@@ -21,14 +21,33 @@ void Test(string name,Func<Entity> create){
   var output=CadEngine.Export(JsonSerializer.SerializeToUtf8Bytes(request),format);using var afterDoc=JsonDocument.Parse(CadEngine.Import(output,format));var after=afterDoc.RootElement;var moved=Bounds(after,owner);var unchanged=Bounds(after,other);
   for(int n=0;n<4;n++){Assert(Math.Abs(moved[n]-box[n]-(n%2==0?20:30))<.001,name+" "+format+" moved bounds mismatch.");Assert(Math.Abs(unchanged[n]-controlBox[n])<.001,name+" changed another source object.");}
   Assert(after.GetProperty("unsupported").GetRawText()==before.GetProperty("unsupported").GetRawText(),name+" changed source coverage.");
+  JsonElement[] Patterns(JsonElement scene)=>scene.GetProperty("items").EnumerateArray().Where(i=>i.GetProperty("owner").GetString()==owner&&i.TryGetProperty("patterns",out var p)&&p.ValueKind==JsonValueKind.Array).SelectMany(i=>i.GetProperty("patterns").EnumerateArray()).ToArray();
+  var oldPatterns=Patterns(before);var newPatterns=Patterns(after);Assert(oldPatterns.Length==newPatterns.Length,name+" changed hatch families.");
+  for(int p=0;p<oldPatterns.Length;p++)foreach(string field in new[]{"basePoint","axis","step","dashes"}){var a=oldPatterns[p].GetProperty(field).EnumerateArray().Select(v=>v.GetDouble()).ToArray();var b=newPatterns[p].GetProperty(field).EnumerateArray().Select(v=>v.GetDouble()).ToArray();Assert(a.Length==b.Length,name+" changed pattern data.");for(int n=0;n<a.Length;n++)Assert(Math.Abs(b[n]-a[n]-(field=="basePoint"?(n==0?20:30):0))<.00001,name+" changed hatch "+field);}
  }
  passed.Add(name+" source movement survives DWG and DXF export");
 }
 Test("Line",()=>new Line{StartPoint=XYZ.Zero,EndPoint=new XYZ(100,25,0)});
 Test("Block instance",()=>{var block=new BlockRecord("FixtureBlock");block.Entities.Add(new Line{StartPoint=XYZ.Zero,EndPoint=new XYZ(100,25,0)});block.Entities.Add(new Circle{Center=new XYZ(30,30,0),Radius=7});return new Insert(block){InsertPoint=new XYZ(10,20,0)};});
+Test("Mirrored rotated block",()=>{var block=new BlockRecord("MirroredBlock");block.Entities.Add(new Line{StartPoint=XYZ.Zero,EndPoint=new XYZ(100,25,0)});block.Entities.Add(new Circle{Center=new XYZ(30,30,0),Radius=7});return new Insert(block){InsertPoint=new XYZ(10,20,0),Rotation=Math.PI*.5,XScale=-.75,YScale=.5};});
 Test("Dimension picture",()=>new DimensionAligned(XYZ.Zero,new XYZ(100,0,0)){DefinitionPoint=new XYZ(0,15,0)});
 Test("Solid",()=>new Solid{FirstCorner=XYZ.Zero,SecondCorner=new XYZ(100,0,0),ThirdCorner=new XYZ(0,50,0),FourthCorner=new XYZ(100,50,0)});
+Hatch FixtureHatch(XYZ normal){
+ var h=new Hatch{Normal=normal,Elevation=3,PatternAngle=Math.PI/4,PatternScale=2};
+ h.Pattern=new HatchPattern("SW_VERIFICATION");h.Pattern.Lines.Add(new HatchPattern.Line{Angle=Math.PI/4,BasePoint=new XY(3,7),Offset=new XY(5,10),DashLengths=new List<double>{8,-4,0,-4}});
+ var boundary=new Hatch.BoundaryPath();var vertices=new[]{new XY(0,0),new XY(100,0),new XY(100,50),new XY(0,50)};
+ for(int n=0;n<4;n++)boundary.Edges.Add(new Hatch.BoundaryPath.Line{Start=vertices[n],End=vertices[(n+1)%4]});h.Paths.Add(boundary);h.SeedPoints.Add(new XY(50,25));return h;
+}
+Test("Patterned hatch",()=>FixtureHatch(XYZ.AxisZ));
+Test("Tilted OCS hatch",()=>FixtureHatch(new XYZ(.6,0,.8)));
+Test("Circle",()=>new Circle{Center=new XYZ(20,30,0),Radius=7});
+Test("Arc",()=>new Arc{Center=new XYZ(20,30,0),Radius=7,StartAngle=.2,EndAngle=2.5});
 var emptyRequest=new{factor=1,original="",originalFormat="dwg",segments=new[]{new{a=new[]{0,0},b=new[]{1000,0}}},labels=new[]{new{x=10,y=20,height=5,text="SparkWorld verification"}}};
 var added=CadEngine.Export(JsonSerializer.SerializeToUtf8Bytes(emptyRequest),"dwg");using(var scene=JsonDocument.Parse(CadEngine.Import(added,"dwg")))Assert(scene.RootElement.GetProperty("items").EnumerateArray().Any(i=>i.TryGetProperty("text",out var t)&&t.GetString()=="SparkWorld verification"),"Added annotations missing.");passed.Add("New vector annotations survive native DWG export");
 bool rejected=false;try{CadEngine.Import(Encoding.UTF8.GetBytes("not CAD"),"dwg");}catch{rejected=true;}Assert(rejected,"Corrupt input was accepted.");passed.Add("Corrupt DWG fails explicitly");
 Console.WriteLine(JsonSerializer.Serialize(new{status="PASS",checks=passed}));
+if(args.Length==2&&args[0]=="--fixture"){
+ var fixture=new CadDocument();fixture.Header.Version=ACadVersion.AC1032;fixture.Header.InsUnits=ACadSharp.Types.Units.UnitsType.Millimeters;fixture.Entities.Add(FixtureHatch(XYZ.AxisZ));fixture.Entities.Add(FixtureHatch(new XYZ(.6,0,.8)));
+ var dim=new DimensionAligned(new XYZ(200,0,0),new XYZ(350,0,0)){DefinitionPoint=new XYZ(200,15,0)};fixture.Entities.Add(dim);dim.UpdateBlock();
+ using var fixtureBytes=new MemoryStream();using(var writer=new DwgWriter(fixtureBytes,fixture))writer.Write();File.WriteAllBytes(args[1],fixtureBytes.ToArray());
+}
