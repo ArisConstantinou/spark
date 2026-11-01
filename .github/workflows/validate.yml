@@ -2,7 +2,7 @@ name: Validate and package SparkWorld
 on:
   workflow_dispatch:
   push:
-    branches: [codex/spark-release]
+    branches: [codex/spark-release, main]
 permissions:
   contents: read
 jobs:
@@ -46,8 +46,43 @@ jobs:
       - name: Include the matching interface
         shell: pwsh
         run: Copy-Item -LiteralPath web -Destination .out/windows/web -Recurse
+      - name: Include component notices
+        shell: pwsh
+        run: Copy-Item -LiteralPath THIRD_PARTY_NOTICES.md -Destination .out/windows/THIRD_PARTY_NOTICES.md
       - uses: actions/upload-artifact@v4
         with:
           name: windows-app
           path: .out/windows
           retention-days: 3
+  pages:
+    if: github.ref == 'refs/heads/main'
+    needs: [browser-engine, desktop]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: browser-engine
+          path: .out/browser
+      - name: Assemble the matching site
+        run: |
+          mkdir -p .out/site/engine
+          cp -a web/. .out/site/
+          cp -a .out/browser/wwwroot/. .out/site/engine/
+          find .out/site/engine -type f \( -name '*.br' -o -name '*.gz' -o -name '*.pdb' \) -delete
+          cp THIRD_PARTY_NOTICES.md .out/site/
+          touch .out/site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .out/site
+      - name: Publish verified site
+        id: deployment
+        uses: actions/deploy-pages@v4

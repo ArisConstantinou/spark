@@ -1,5 +1,7 @@
 // A private worker hosts the CAD runtime for one operation. Source files never
 // leave the device, and terminating the worker releases the managed heap.
+// Our own message handler must not be mistaken for a .NET pthread worker.
+self.dotnetSidecar=true;
 self.onmessage=async({data})=>{
  try{
   self.postMessage({phase:'Loading CAD engine…'});

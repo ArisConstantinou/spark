@@ -8,7 +8,7 @@ const report={status:'RUNNING',checks:[],errors:[]};let browser;
 (async()=>{
  await fs.writeFile(path.join(root,'tests/browser-engine.json'),JSON.stringify(report));
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH||undefined,args:['--disable-gpu-shader-disk-cache','--disk-cache-size=1048576','--disable-background-networking']});
- const page=await browser.newPage({viewport:{width:1600,height:1000}});page.on('pageerror',e=>report.errors.push(e.message));page.on('console',m=>{if(m.type()==='error')report.errors.push(m.text().slice(0,400));});
+ const page=await browser.newPage({viewport:{width:1600,height:1000}});page.on('pageerror',e=>report.errors.push(e.message));page.on('console',m=>{console.log(m.type()+': '+m.text().slice(0,400));if(m.type()==='error')report.errors.push(m.text().slice(0,400));});page.on('requestfailed',r=>console.log('REQUEST FAILED '+r.url()+' '+r.failure()?.errorText));
  // Local read-only mapping uses exactly the files shipped under /engine on Pages.
  if(process.env.SPARK_TEST_MAP_ENGINE)await page.route('**/engine/**',async route=>{
   const relative=new URL(route.request().url()).pathname.split('/engine/')[1];
@@ -21,7 +21,11 @@ const report={status:'RUNNING',checks:[],errors:[]};let browser;
  const base64=(await fs.readFile(file)).toString('base64');
  report.engine=await page.evaluate(async raw=>{
   const p=await import('./platform.js'),bytes=Uint8Array.from(atob(raw),c=>c.charCodeAt(0)),start=performance.now();
-  const before=await p.importCad(bytes,'dwg');const imported=performance.now()-start;
+  console.log('Probing browser engine startup and a small native round trip…');
+  const fixture=await p.exportCad({factor:1,original:'',originalFormat:'dwg',segments:[{a:[0,0],b:[1000,500]}],labels:[]},'dwg',console.log);
+  const fixtureScene=await p.importCad(fixture,'dwg',console.log);if(!fixtureScene.items.length)throw Error('Empty browser fixture.');
+  console.log('Reading representative DWG…');
+  const before=await p.importCad(bytes,'dwg',console.log);const imported=performance.now()-start;
   const target=before.items.find(i=>i.kind==='path'&&!i.fill&&before.sourceObjects?.some(e=>e.handle===i.owner&&e.type==='Line'))||before.items.find(i=>i.kind==='path'&&!i.fill);
   const owner=target.owner,dx=before.factor*2,dy=before.factor*3;
   const source=before.items.filter(i=>i.owner===owner),bounds=items=>[Math.min(...items.map(i=>i.bounds[0])),Math.min(...items.map(i=>i.bounds[1])),Math.max(...items.map(i=>i.bounds[2])),Math.max(...items.map(i=>i.bounds[3]))];
