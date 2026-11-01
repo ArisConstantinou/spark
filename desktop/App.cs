@@ -14,6 +14,7 @@ using System.Windows.Media;
 namespace SparkWorld;
 public static class App {
  [STAThread]public static void Main(string[] args){
+  int outputArg=Array.IndexOf(args,"--qa-output");if(args.Contains("--qa")&&outputArg>=0&&outputArg+1<args.Length){string output=Path.GetFullPath(args[outputArg+1]);Directory.CreateDirectory(output);File.WriteAllText(Path.Combine(output,"desktop-qa.json"),"{\"status\":\"RUNNING\"}");File.WriteAllText(Path.Combine(output,"desktop-focus.json"),"{\"status\":\"RUNNING\"}");}
   var app=new Application();app.ShutdownMode=ShutdownMode.OnMainWindowClose;
   var window=new SparkWindow(args);app.MainWindow=window;app.Run(window);
  }
@@ -108,7 +109,7 @@ sealed class SparkWindow:Window {
   try{
    while(await view.CoreWebView2.ExecuteScriptAsync("!!window.fyp")!="true"){if(watch.Elapsed.TotalSeconds>45)throw new TimeoutException("Desktop interface did not initialize.");await Task.Delay(100);}
    int fileArg=Array.IndexOf(args,"--dwg");string source=fileArg>=0&&fileArg+1<args.Length?args[fileArg+1]:"";
-   await view.CoreWebView2.ExecuteScriptAsync("window.__qaSource="+JsonSerializer.Serialize(source));
+   await view.CoreWebView2.ExecuteScriptAsync("window.__qaSource="+JsonSerializer.Serialize(source)+";window.__qaOutput="+JsonSerializer.Serialize(output));
    string script=File.ReadAllText(Path.Combine(webRoot,"desktop-qa.js"));await view.CoreWebView2.ExecuteScriptAsync(script);
    string result;do{await Task.Delay(250);result=await view.CoreWebView2.ExecuteScriptAsync("window.__sparkQa?JSON.stringify(window.__sparkQa):null");if(watch.Elapsed.TotalSeconds>240)throw new TimeoutException("Desktop QA timed out.");}while(result=="null");
    string report=JsonSerializer.Deserialize<string>(result)!;using var parsed=JsonDocument.Parse(report);
