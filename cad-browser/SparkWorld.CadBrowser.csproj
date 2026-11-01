@@ -3,7 +3,7 @@
     <TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType>
     <AssemblyName>SparkWorld.CadBrowser</AssemblyName><AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><LangVersion>latest</LangVersion>
-    <WasmEnableHotReload>false</WasmEnableHotReload><WasmBuildNative>false</WasmBuildNative>
+    <WasmEnableHotReload>false</WasmEnableHotReload><WasmBuildNative>true</WasmBuildNative>
     <RunAOTCompilation>false</RunAOTCompilation><PublishTrimmed>false</PublishTrimmed>
     <OverrideHtmlAssetPlaceholders>false</OverrideHtmlAssetPlaceholders>
     <InvariantGlobalization>true</InvariantGlobalization>
