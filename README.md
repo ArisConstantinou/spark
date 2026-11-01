@@ -30,6 +30,8 @@ The target is 2D model-space electrical plans. Display includes lines, arcs, cir
 
 Native export re-encodes CAD through ACadSharp. It is not a lossless byte-preserving editor; unsupported or external content may be omitted. Desktop hosting does not eliminate parser/format limits. CAD/image imports accept up to 48 MiB; JSON accepts 128 MiB. Complex drawings can exceed processing or memory limits.
 
+Very large browser drawings can take several minutes to decode or write. In local verification, a 6.6 MB / 115,089-primitive drawing took about 165 seconds to decode in WebAssembly. This is separate from camera interaction latency. The Windows host runs the native engine. CAD constraints and associative dependencies are not recalculated; review exported drawings in the intended CAD application.
+
 The renderer spatially indexes CAD in a worker and refines a composited bitmap while the camera moves. A floating origin preserves large-coordinate precision. Vector/native exports are independent of the bitmap. Fit can focus on the main cluster with an explicit distant-entity notice; All shows every visible object.
 
 Socket artwork uses front-view Type G patterns. Symbols and circuit notes are drafting aids. Electrical sizing, protection coordination, compliance certification and simulation are not implemented.
