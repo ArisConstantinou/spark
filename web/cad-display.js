@@ -57,7 +57,7 @@ export class CadDisplay{
   this.worker.postMessage({type:'source',cad:{items:cad.items,bounds:cad.bounds,factor:cad.factor},hidden,font:this.font});
  }
  same(a,b){return a.view.x===b.view.x&&a.view.y===b.view.y&&a.view.k===b.view.k&&a.viewportWidth===b.viewportWidth&&a.viewportHeight===b.viewportHeight&&a.dpr===b.dpr;}
- draw(view){if(!this.cad)return;this.desired={view:{...view},viewportWidth:this.width,viewportHeight:this.height,dpr:this.dpr};this.compose();if(!this.busy&&(!this.cached||!this.same(this.desired,this.cached)))this.request();}
+ draw(view){if(!this.cad)return;this.desired={view:{...view},viewportWidth:this.width,viewportHeight:this.height,dpr:this.dpr};this.compose();if(!this.busy&&(!this.stats.ready||!this.cached||!this.same(this.desired,this.cached)))this.request();}
  request(){if(!this.desired||!this.worker)return;this.busy=true;this.stats.pending=true;const margin=384;this.worker.postMessage({type:'render',...this.desired,margin});}
  compose(){if(!this.cached||!this.desired)return;const a=this.desired.view,b=this.cached.view,r=a.k/b.k;this.canvas.style.transform=`matrix(${r},0,0,${r},${a.x-r*(b.x+this.cached.margin)},${a.y-r*(b.y+this.cached.margin)})`;}
  get(id){return this.byId.get(id)?.item||null;}
