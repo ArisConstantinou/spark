@@ -1,0 +1,29 @@
+name: Validate and package SparkWorld
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/spark-release]
+permissions:
+  contents: read
+jobs:
+  browser-engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install browser build tools
+        run: dotnet workload install wasm-tools --skip-manifest-update
+      - name: Build native command-line engine
+        run: dotnet build cad/CadBridge.csproj -c Release -o .out/cad
+      - name: Build browser CAD engine
+        run: dotnet publish cad-browser/SparkWorld.CadBrowser.csproj -c Release -o .out/browser
+      - name: Report output sizes
+        run: du -sh .out/browser && find .out/browser -maxdepth 3 -type f | head -40
+      - uses: actions/upload-artifact@v4
+        with:
+          name: browser-engine
+          path: .out/browser
+          retention-days: 3

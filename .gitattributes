@@ -1,0 +1,8 @@
+* text=auto
+*.js text eol=lf
+*.cjs text eol=lf
+*.cs text eol=lf
+*.yml text eol=lf
+*.wasm binary
+*.dll binary
+*.exe binary

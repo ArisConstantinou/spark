@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType>
+    <AssemblyName>SparkWorld.CadBrowser</AssemblyName><AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><LangVersion>latest</LangVersion>
+    <WasmEnableHotReload>false</WasmEnableHotReload><WasmBuildNative>false</WasmBuildNative>
+    <RunAOTCompilation>false</RunAOTCompilation><PublishTrimmed>false</PublishTrimmed>
+    <OverrideHtmlAssetPlaceholders>false</OverrideHtmlAssetPlaceholders>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <WasmMainJSPath>main.js</WasmMainJSPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="ACadSharp" Version="3.6.51" />
+    <Compile Include="../cad/CadEngine.cs" Link="CadEngine.cs" />
+    <Compile Include="../cad/CadScene.cs" Link="CadScene.cs" />
+    <Compile Include="../cad/CadEntityGeometry.cs" Link="CadEntityGeometry.cs" />
+    <Compile Include="../cad/CadInspection.cs" Link="CadInspection.cs" />
+  </ItemGroup>
+</Project>

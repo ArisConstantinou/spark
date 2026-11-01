@@ -1,0 +1,22 @@
+*.user
+node_modules/
+.DS_Store
+
+# Local operating notes, guarded jobs and machine-specific harnesses stay private.
+/AGENTS.md
+/PROJECT_STATE.md
+/build.py
+/Start-SparkWorld.ps1
+/jobs/
+/tests/acceptance.cjs
+/tests/dwg-regression.cjs
+/tests/canvas-interaction.cjs
+/tests/cad-fill.cjs
+bin/
+obj/
+.out/
+*.dwg
+*.dxf
+*.log
+*.png
+*.zip
