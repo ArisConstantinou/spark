@@ -87,6 +87,6 @@ partial class Scene(CadDocument document,List<string> notices) {
         factor=units switch{1=>25.4,2=>304.8,4=>1,5=>10,6=>1000,7=>1000000,_=>1};
         Visit(document.Entities,[1,0,0,1,0,0],null,null);
         if(items.Count==0)throw new Exception("No supported 2D model-space entities were found. Paper-space layouts and custom proxy objects may need an export from the source CAD.");
-        return new {adapterVersion=2,items,layers=layers.Values,factor,unitsKnown=units is 1 or 2 or 4 or 5 or 6 or 7,units,version=document.Header.Version.ToString(),bounds=new[]{all.Min(p=>p[0]),all.Min(p=>p[1]),all.Max(p=>p[0]),all.Max(p=>p[1])},coverage,unsupported,warnings=notices.Distinct().Take(15),textNotice="CAD text uses browser fonts. Custom SHX/BigFont appearance is not guaranteed. Curves and hatch boundaries are sampled for display; original CAD bytes are retained for export."};
+        return new {adapterVersion=3,sourceObjects=document.Entities.Select(e=>new{handle=e.Handle.ToString(),type=e.GetType().Name,layer=e.Layer?.Name??"0"}),items,layers=layers.Values,factor,unitsKnown=units is 1 or 2 or 4 or 5 or 6 or 7,units,version=document.Header.Version.ToString(),bounds=new[]{all.Min(p=>p[0]),all.Min(p=>p[1]),all.Max(p=>p[0]),all.Max(p=>p[1])},coverage,unsupported,warnings=notices.Distinct().Take(15),textNotice="CAD text uses browser fonts. Custom SHX/BigFont appearance is not guaranteed. Curves and hatch boundaries are sampled for display; original CAD bytes are retained for export."};
     }
 }

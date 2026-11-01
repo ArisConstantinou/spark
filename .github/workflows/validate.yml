@@ -27,3 +27,25 @@ jobs:
           name: browser-engine
           path: .out/browser
           retention-days: 3
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Create application icon
+        shell: pwsh
+        run: ./tools/New-Icon.ps1 -OutputPath "$pwd/.out/SparkWorld.ico"
+      - name: Build Windows application
+        shell: pwsh
+        run: dotnet build desktop/SparkWorld.Desktop.csproj -c Release -o .out/windows -p:SparkIcon="$pwd/.out/SparkWorld.ico"
+      - name: Include the matching interface
+        shell: pwsh
+        run: Copy-Item -LiteralPath web -Destination .out/windows/web -Recurse
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-app
+          path: .out/windows
+          retention-days: 3

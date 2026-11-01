@@ -22,7 +22,7 @@ export const SYMBOLS=[
  {id:'board',name:'Distribution board',category:'Distribution',prefix:'DB',color:'#ffb85e',lines:[rect(26,30),[[-7,-8],[7,-8]],[[-7,0],[7,0]],[[-7,8],[7,8]]]},
 ];
 export function symbolSVG(type){const s=SYMBOLS.find(s=>s.id===type)||SYMBOLS[0];return s.lines.map(p=>`<polyline points="${p.map(v=>v.join(',')).join(' ')}"/>`).join('');}
-export function blank(name='Untitled drawing'){return{schema:SCHEMA,id:uid(),name,created:new Date().toISOString(),updated:new Date().toISOString(),objects:[],wires:[],measures:[],circuits:[],hiddenLayers:[],cad:null,background:null,calibrated:false,grid:100};}
+export function blank(name='Untitled drawing'){return{schema:SCHEMA,id:uid(),name,created:new Date().toISOString(),updated:new Date().toISOString(),objects:[],wires:[],measures:[],circuits:[],hiddenLayers:[],cadMoves:{},cad:null,background:null,calibrated:false,grid:100};}
 export function validate(raw){
  if(!raw||![SCHEMA,'aris-volt/v1','fyp-electrical/v1'].includes(raw.schema)||!Array.isArray(raw.objects)||!Array.isArray(raw.wires)||!Array.isArray(raw.circuits))throw Error('This is not an SparkWorld drawing.');
  if(raw.objects.length>20000||raw.wires.length>20000||raw.circuits.length>2000)throw Error('Drawing exceeds safe editor limits.');
@@ -33,6 +33,7 @@ export function validate(raw){
  const id=v=>typeof v==='string'&&/^[A-Za-z0-9_-]{1,80}$/.test(v);
  const nums=a=>Array.isArray(a)&&a.every(v=>Number.isFinite(v)&&Math.abs(v)<1e12);
  const text=(v,n=500)=>typeof v==='string'&&v.length<=n;
+ if(raw.cadMoves!==undefined){if(!raw.cadMoves||typeof raw.cadMoves!=='object'||Array.isArray(raw.cadMoves)||Object.keys(raw.cadMoves).length>20000||!Object.entries(raw.cadMoves).every(([id,m])=>/^\d{1,20}$/.test(id)&&m&&nums([m.dx,m.dy])))throw Error('Invalid source CAD movement.');}
  if(!id(raw.id)||!text(raw.name,120)||!Number.isFinite(raw.grid)||raw.grid<1||raw.grid>10000||typeof raw.calibrated!=='boolean'||!Array.isArray(raw.hiddenLayers)||!raw.hiddenLayers.every(v=>text(v)))throw Error('Invalid drawing metadata.');
  const seen=new Set();for(const v of [...raw.objects,...raw.wires,...(raw.measures||[]),...raw.circuits]){if(!id(v.id)||seen.has(v.id))throw Error('Invalid or duplicate object identifier.');seen.add(v.id);}
  if((raw.measures||[]).length>20000)throw Error('Too many measurements.');
@@ -49,7 +50,7 @@ export function validate(raw){
 }
 export class History{
  constructor(){this.undo=[];this.redo=[];}
- snapshot(d){return JSON.stringify({name:d.name,objects:d.objects,wires:d.wires,measures:d.measures,circuits:d.circuits,hiddenLayers:d.hiddenLayers,calibrated:d.calibrated,grid:d.grid,cadScale:d.cad?{factor:d.cad.factor,unitOverride:d.cad.unitOverride}:null,background:d.background?{width:d.background.width,height:d.background.height}:null});}
+ snapshot(d){return JSON.stringify({name:d.name,objects:d.objects,wires:d.wires,measures:d.measures,circuits:d.circuits,cadMoves:d.cadMoves||{},hiddenLayers:d.hiddenLayers,calibrated:d.calibrated,grid:d.grid,cadScale:d.cad?{factor:d.cad.factor,unitOverride:d.cad.unitOverride}:null,background:d.background?{width:d.background.width,height:d.background.height}:null});}
  push(d){this.undo.push(this.snapshot(d));if(this.undo.length>80)this.undo.shift();this.redo=[];}
  restore(d,s){const a=JSON.parse(s);if(a.background&&d.background){d.background.width=a.background.width;d.background.height=a.background.height;}if(a.cadScale&&d.cad){rescaleCad(d.cad,a.cadScale.factor);if(a.cadScale.unitOverride===undefined)delete d.cad.unitOverride;else d.cad.unitOverride=a.cadScale.unitOverride;}delete a.cadScale;delete a.background;Object.assign(d,a);}
  back(d){if(!this.undo.length)return false;this.redo.push(this.snapshot(d));this.restore(d,this.undo.pop());return true;}
@@ -57,6 +58,13 @@ export class History{
 }
 export function rescaleCad(cad,factor){const ratio=factor/cad.factor;if(!Number.isFinite(ratio)||ratio<=0)throw Error('Invalid CAD scale.');if(ratio!==1){for(const i of cad.items){if(i.bounds)i.bounds=i.bounds.map(v=>v*ratio);if(i.kind==='path'){i.d=i.d.replace(/[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/gi,v=>Number(v)*ratio);for(const p of i.patterns||[])for(const k of ['basePoint','axis','step'])p[k]=p[k].map(v=>v*ratio);}else{i.x*=ratio;i.y*=ratio;i.height*=ratio;}}cad.bounds=cad.bounds.map(v=>v*ratio);}cad.factor=factor;}
 export function distance(points){return points.slice(1).reduce((s,p,i)=>s+Math.hypot(p[0]-points[i][0],p[1]-points[i][1]),0);}
+const movedCache=new WeakMap();
+export function effectiveCad(d){
+ const cad=d.cad;if(!cad)return null;const key=cad.factor+'|'+JSON.stringify(d.cadMoves||{}),old=movedCache.get(cad);if(old?.key===key)return old.value;if(!Object.keys(d.cadMoves||{}).length)return cad;
+ const bounds=[Infinity,Infinity,-Infinity,-Infinity],items=cad.items.map(i=>{const m=d.cadMoves?.[i.owner];let out=i;if(m&&(m.dx||m.dy)){out={...i,bounds:i.bounds?.map((v,n)=>v+(n%2?m.dy:m.dx))};if(i.kind==='path'){let n=0;out.d=i.d.replace(/[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/gi,v=>String(Number(v)+(n++%2?m.dy:m.dx)));if(i.patterns)out.patterns=i.patterns.map(p=>({...p,basePoint:[p.basePoint[0]+m.dx,p.basePoint[1]+m.dy]}));}else{out.x=i.x+m.dx;out.y=i.y+m.dy;}}
+  if(out.bounds){bounds[0]=Math.min(bounds[0],out.bounds[0]);bounds[1]=Math.min(bounds[1],out.bounds[1]);bounds[2]=Math.max(bounds[2],out.bounds[2]);bounds[3]=Math.max(bounds[3],out.bounds[3]);}return out;});
+ const value={...cad,items,bounds:bounds.every(Number.isFinite)?bounds:cad.bounds};movedCache.set(cad,{key,value});return value;
+}
 const boundsCache=new WeakMap();
 function cadBounds(cad,hidden){const key=cad.factor+'|'+cad.bounds.join(',')+'|'+hidden.join(';'),cached=boundsCache.get(cad);if(cached?.key===key)return cached;
  const items=cad.items.filter(i=>Array.isArray(i.bounds)&&i.bounds.length===4&&i.bounds.every(Number.isFinite)&&!(i.visibilityLayers||[i.layer]).some(l=>hidden.includes(l)));
@@ -67,11 +75,11 @@ function cadBounds(cad,hidden){const key=cad.factor+'|'+cad.bounds.join(',')+'|'
  for(const axis of [0,1]){if(core.length<100)continue;const sorted=core.map(i=>({i,v:(i.bounds[axis]+i.bounds[axis+2])/2})).sort((a,b)=>a.v-b.v),span=sorted.at(-1).v-sorted[0].v;let gap=0,cut=0;for(let n=1;n<sorted.length;n++){const g=sorted[n].v-sorted[n-1].v;if(g>gap){gap=g;cut=n;}}if(span>0&&gap>span*.35&&(cut/core.length<=.05||cut/core.length>=.95))core=(cut/core.length<=.05?sorted.slice(cut):sorted.slice(0,cut)).map(v=>v.i);}
  const result={key,all:bounds(items),focus:bounds(core),excluded:items.length-core.length};boundsCache.set(cad,result);return result;
 }
-export function drawingBounds(d,{all=false}={}){const c=d.cad?cadBounds(d.cad,d.hiddenLayers):null;let b=c?[...(all?c.all:c.focus)]:d.background?[0,0,d.background.width,d.background.height]:[0,0,16000,10000];for(const o of d.objects)b=[Math.min(b[0],o.x-o.size),Math.min(b[1],o.y-o.size),Math.max(b[2],o.x+o.size),Math.max(b[3],o.y+o.size)];for(const w of [...d.wires,...d.measures])for(const p of w.points)b=[Math.min(b[0],p[0]),Math.min(b[1],p[1]),Math.max(b[2],p[0]),Math.max(b[3],p[1])];b.excluded=all?0:c?.excluded||0;return b;}
+export function drawingBounds(d,{all=false}={}){const source=effectiveCad(d),c=source?cadBounds(source,d.hiddenLayers):null;let b=c?[...(all?c.all:c.focus)]:d.background?[0,0,d.background.width,d.background.height]:[0,0,16000,10000];for(const o of d.objects)b=[Math.min(b[0],o.x-o.size),Math.min(b[1],o.y-o.size),Math.max(b[2],o.x+o.size),Math.max(b[3],o.y+o.size)];for(const w of [...d.wires,...d.measures])for(const p of w.points)b=[Math.min(b[0],p[0]),Math.min(b[1],p[1]),Math.max(b[2],p[0]),Math.max(b[3],p[1])];b.excluded=all?0:c?.excluded||0;return b;}
 export function objectSegments(o){const s=SYMBOLS.find(s=>s.id===o.type),r=o.rotation*Math.PI/180,k=o.size/32;const at=p=>[o.x+(p[0]*Math.cos(r)-p[1]*Math.sin(r))*k,o.y+(p[0]*Math.sin(r)+p[1]*Math.cos(r))*k];return s.lines.flatMap(p=>p.slice(1).map((b,i)=>({a:at(p[i]),b:at(b)})));}
 // Keep browser path coordinates near the local drawing origin. Native millimetre
 // coordinates remain unchanged in the model, measurements and CAD exports.
-export function drawingFrame(d){if(!d.cad)return{x:0,y:0,unit:1};const b=d.cad.bounds,w=b[2]-b[0],h=b[3]-b[1];return{x:b[0]+w/2,y:b[1]+h/2,unit:Math.max(1,10**Math.ceil(Math.log10(Math.max(w,h,1)/10000)))};}
+export function drawingFrame(d){const cad=effectiveCad(d);if(!cad)return{x:0,y:0,unit:1};const b=cad.bounds,w=b[2]-b[0],h=b[3]-b[1];return{x:b[0]+w/2,y:b[1]+h/2,unit:Math.max(1,10**Math.ceil(Math.log10(Math.max(w,h,1)/10000)))};}
 export function cadMarkup(cad,hiddenLayers=[],{color='#95a8b7',stroke=.8,screenStroke=true}={}){
  if(!cad)return '';
  const {x:ox,y:oy,unit}=drawingFrame({cad});
@@ -97,7 +105,7 @@ export function cadMarkup(cad,hiddenLayers=[],{color='#95a8b7',stroke=.8,screenS
 export function exportSVG(d,{paper=false}={}){
  const f=drawingFrame(d),x=v=>(v-f.x)/f.unit,y=v=>(v-f.y)/f.unit,raw=drawingBounds(d,{all:true}),b=[x(raw[0]),y(raw[1]),x(raw[2]),y(raw[3])],pad=Math.max(b[2]-b[0],b[3]-b[1])*.025,w=b[2]-b[0]+pad*2,h=b[3]-b[1]+pad*2;
  const color=paper?'#182b3a':'#c6d4de';
- const cad=cadMarkup(d.cad,d.hiddenLayers,{color,stroke:Math.max(w/3500,1/f.unit)*f.unit,screenStroke:false,local:true});
+ const cad=cadMarkup(effectiveCad(d),d.hiddenLayers,{color,stroke:Math.max(w/3500,1/f.unit)*f.unit,screenStroke:false,local:true});
  const bg=d.background?`<image href="${d.background.data}" x="${x(0)}" y="${y(0)}" width="${d.background.width/f.unit}" height="${d.background.height/f.unit}"/>`:'';
  const wires=d.wires.map(v=>`<polyline points="${v.points.map(p=>[x(p[0]),y(p[1])].join(',')).join(' ')}" fill="none" stroke="${escape(d.circuits.find(c=>c.id===v.circuit)?.color||'#3e9eff')}" stroke-width="${w/700}"/>`).join('');
  const objects=d.objects.map(o=>`<g transform="translate(${x(o.x)} ${y(o.y)}) rotate(${o.rotation}) scale(${o.size/f.unit/32})" fill="none" stroke="${escape(d.circuits.find(c=>c.id===o.circuit)?.color||SYMBOLS.find(s=>s.id===o.type).color)}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${symbolSVG(o.type)}</g><text x="${x(o.x+o.size*.7)}" y="${y(o.y)}" fill="${color}" font-size="${o.size/f.unit*.5}">${escape(o.label)}</text>`).join('');

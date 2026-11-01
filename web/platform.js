@@ -1,13 +1,15 @@
 const local=['127.0.0.1','localhost'].includes(location.hostname);
 export const desktop=!!globalThis.chrome?.webview;
 const browserEngine=!desktop&&(!local||new URLSearchParams(location.search).get('engine')==='browser');
-const pending=new Map();let serial=0;
+const pending=new Map(),listeners=new Set();let serial=0;
 if(desktop)chrome.webview.addEventListener('message',({data})=>{
+ if(data.event){for(const listener of listeners)listener(data);return;}
  const job=pending.get(data.id);if(!job)return;
  if(data.chunk!==undefined){job.chunks.push(data.chunk);return;}
  pending.delete(data.id);clearTimeout(job.timer);
  if(data.error)job.reject(Error(data.error));else{let result=data.result;if(data.chunked)result=JSON.parse(job.chunks.join(''));job.resolve(result);}
 });
+export const onHostEvent=listener=>{listeners.add(listener);return()=>listeners.delete(listener);};
 export function hostRequest(method,args={}){
  if(!desktop)return Promise.reject(Error('This action requires SparkWorld for Windows.'));
  return new Promise((resolve,reject)=>{const id=String(++serial),timer=setTimeout(()=>{pending.delete(id);reject(Error('The desktop operation timed out.'));},180000);pending.set(id,{resolve,reject,timer,chunks:[]});chrome.webview.postMessage({id,method,args});});
@@ -37,7 +39,7 @@ export async function exportCad(request,format,onPhase){
 }
 export async function health(){
  if(desktop)return hostRequest('app.info');
- if(browserEngine)return{cad:true,mode:'browser',decoder:'ACadSharp 3.6.51 · WebAssembly'};
+ if(browserEngine){const response=await fetch(new URL('./engine/_framework/dotnet.js',import.meta.url),{method:'HEAD'});return{cad:response.ok,mode:'browser',decoder:'ACadSharp 3.6.51 · WebAssembly'};}
  return(await fetch(new URL('api/health',document.baseURI))).json();
 }
 export async function saveDesktop(bytes,name,mime,options){return uploadHost('file.save',bytes,{name,mime,...options});}
