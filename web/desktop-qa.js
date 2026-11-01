@@ -63,6 +63,14 @@
   let denied=false;try{await platform.saveDesktop(data,'desktop-file-check.svg','image/svg+xml',{path:exportPath,stamp:'stale'});}catch{denied=true;}check(denied,'Changed destination stamp blocks overwrite');
   const saved=await platform.hostRequest('file.read',{path:exportPath});check(atob(saved.base64)===new TextDecoder().decode(data),'Atomic desktop export contains the expected file bytes');
   denied=false;try{await platform.saveDesktop(data,'desktop-file-check.svg','image/svg+xml',{path:exportPath,stamp:(await platform.hostRequest('file.stat',{path:exportPath})).stamp});}catch{denied=true;}check(denied,'Imported fixture cannot be overwritten as an export');
+  const csvPath=window.__qaOutput+'\\desktop-dialog-check.csv',csvBefore=await platform.hostRequest('file.stat',{path:csvPath});
+  $('#export').click();$('[data-export="csv"]').click();await wait(()=>$('#file-folder'));
+  $('#file-folder').value=window.__qaOutput;$('#file-go').click();await wait(()=>$('#file-folder')?.value===window.__qaOutput&&$('#file-list-info')?.textContent.includes('matching entries'));
+  $('#file-name').value='desktop-dialog-check.csv';$('#file-name').dispatchEvent(new Event('input'));$('#dialog-actions button:last-child').click();
+  await wait(()=>!$('#dialog').open||document.querySelector('dialog[aria-label="Replace file?"]'));
+  document.querySelector('dialog[aria-label="Replace file?"] button.danger')?.click();
+  await wait(async()=>{const stat=await platform.hostRequest('file.stat',{path:csvPath});return !$('#dialog').open&&stat.exists&&stat.stamp!==csvBefore.stamp;});
+  const csv=await platform.hostRequest('file.read',{path:csvPath});check(atob(csv.base64).includes('Plan route length'),'Themed export picker navigates and saves a real CSV file');
   let rejected=false;try{await platform.importCad(new TextEncoder().encode('not CAD'),'dwg');}catch{rejected=true;}check(rejected,'Corrupt DWG rejected without replacing project');
   check(fyp.document.objects.length===initialPoints+1,'Project survives failed CAD operation');
   document.querySelector('[data-tool="select"]').click();report.status='PASS';

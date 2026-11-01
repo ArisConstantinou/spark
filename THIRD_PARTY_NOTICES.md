@@ -16,7 +16,11 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ## Development and runtime tooling
 
-Node.js and .NET are installed separately on this PC and are not bundled by this source project. Playwright and Sharp are used only by headless development verification from the existing Codex dependency runtime; they are not runtime browser dependencies. No LibreDWG/GPL component is incorporated.
+Microsoft WebView2 SDK wrappers 1.0.4314.35 are redistributed with the Windows package. Copyright (C) Microsoft Corporation. Their full redistribution notice is retained in licenses/WEBVIEW2.txt from the pinned NuGet package. The Edge WebView2 Runtime is installed separately and is not included in the package.
+
+The .NET browser runtime and bundled System.* / Microsoft.Bcl runtime support libraries are MIT licensed. Copyright (c) .NET Foundation and Contributors. The MIT permission and warranty terms reproduced above also apply to these components. Source and license: https://github.com/dotnet/runtime/blob/main/LICENSE.TXT . The Windows .NET Framework runtime is provided separately by Windows; it is not bundled here.
+
+Node.js and the .NET SDK are development/build prerequisites. Playwright and Sharp are verification tools, not application dependencies. The compiled browser engine includes its .NET WebAssembly runtime; the Windows package uses the separately provided .NET Framework and WebView2 runtimes. No LibreDWG/GPL component is incorporated.
 
 ## CAD verification samples
 

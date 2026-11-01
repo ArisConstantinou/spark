@@ -50,7 +50,9 @@ jobs:
         run: Copy-Item -LiteralPath web -Destination .out/windows/web -Recurse
       - name: Include component notices
         shell: pwsh
-        run: Copy-Item -LiteralPath THIRD_PARTY_NOTICES.md -Destination .out/windows/THIRD_PARTY_NOTICES.md
+        run: |
+          Copy-Item -LiteralPath THIRD_PARTY_NOTICES.md -Destination .out/windows/THIRD_PARTY_NOTICES.md
+          Copy-Item -LiteralPath licenses -Destination .out/windows/licenses -Recurse
       - uses: actions/upload-artifact@v4
         with:
           name: windows-app
@@ -81,6 +83,7 @@ jobs:
           find .out/site/engine -type f \( -name '*.br' -o -name '*.gz' -o -name '*.pdb' \) -delete
           cp THIRD_PARTY_NOTICES.md .out/site/
           touch .out/site/.nojekyll
+          python -c 'import json,os; open(".out/site/version.json","w").write(json.dumps({"commit":os.environ["GITHUB_SHA"]}))'
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -15,7 +15,7 @@ export function hostRequest(method,args={}){
  return new Promise((resolve,reject)=>{const id=String(++serial),timer=setTimeout(()=>{pending.delete(id);reject(Error('The desktop operation timed out.'));},180000);pending.set(id,{resolve,reject,timer,chunks:[]});chrome.webview.postMessage({id,method,args});});
 }
 function wasmJob(mode,format,data,onPhase){
- return new Promise((resolve,reject)=>{const worker=new Worker(new URL('./cad-engine-worker.js',import.meta.url),{type:'module'}),bytes=new Uint8Array(data).slice();const timer=setTimeout(()=>finish(Error('CAD processing timed out. Try a floor-specific drawing.')),180000);
+ return new Promise((resolve,reject)=>{const worker=new Worker(new URL('./cad-engine-worker.js',import.meta.url),{type:'module'}),bytes=data instanceof ArrayBuffer?new Uint8Array(data.slice(0)):new Uint8Array(data);const timer=setTimeout(()=>finish(Error('CAD processing timed out. Try a floor-specific drawing.')),180000);
   function finish(error,result){clearTimeout(timer);worker.terminate();error?reject(error):resolve(result);}
   worker.onmessage=({data})=>{if(data.phase){onPhase?.(data.phase);return;}if(!data.ok)return finish(Error(data.error));try{finish(null,mode==='import'?JSON.parse(data.json):data.bytes);}catch(e){finish(e);}};
   worker.onerror=e=>finish(Error(e.message||'The browser CAD engine could not start.'));

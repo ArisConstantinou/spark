@@ -4,6 +4,7 @@ root=pathlib.Path(os.environ['CODEX_GENERATED_OUTPUT']);source=pathlib.Path(__fi
 receipt=root/'jobs/artifact-windows.json';owned=json.loads(receipt.read_text());target=root/'build/windows'
 inputs=[(p,'web/'+p.name) for p in (source/'web').iterdir() if p.is_file()]
 inputs.append((source/'THIRD_PARTY_NOTICES.md','THIRD_PARTY_NOTICES.md'))
+inputs.extend((p,'licenses/'+p.name) for p in (source/'licenses').iterdir() if p.is_file())
 for p,name in inputs:
     data=p.read_bytes();destination=target.joinpath(*name.split('/'))
     if destination.exists():

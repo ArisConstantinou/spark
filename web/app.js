@@ -7,7 +7,7 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let desktopUi=null,fileJob=null;
 let doc=blank(),history=new History(),selection=null,tool='select',chosen='double-socket',snap=true,started=false,dirty=false,saveTimer,toastTimer,activeCircuit='',routePoints=[],pointer=null,view={x:30,y:30,k:.05},referenceKey='',layerMode=false,fitScale=.05,frame={x:0,y:0,unit:1};
 const svg=$('#canvas'),viewport=$('#viewport'),world=$('#world');
-const cadDisplay=new CadDisplay($('#cad-ink'),()=>minimap(),message=>{if(doc.cad)$('#reference').innerHTML=cadMarkup(doc.cad,doc.hiddenLayers);toast('CAD compatibility view: '+message);});let cameraFrame=0;
+const cadDisplay=new CadDisplay($('#cad-ink'),()=>minimap(),message=>{if(doc.cad)$('#reference').innerHTML=cadMarkup(effectiveCad(doc),doc.hiddenLayers);toast('CAD compatibility view: '+message);});let cameraFrame=0;
 function toast(message){$('#toast').textContent=message;$('#toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').hidden=true,4500);}
 function busy(show,message='Reading drawing…'){$('#busy').hidden=!show;$('#busy-text').textContent=message;}
 function dialog(title,body,actions=[]){$('#dialog-title').textContent=title;$('#dialog-body').innerHTML=body;$('#dialog-actions').replaceChildren();for(const a of actions){const b=document.createElement('button');b.type='button';b.textContent=a.label;b.className=a.primary?'primary':'';b.addEventListener('click',async()=>{try{if(await a.run()!==false)$('#dialog').close();}catch(e){toast(e.message);}});$('#dialog-actions').append(b);}if(!$('#dialog').open)$('#dialog').showModal();}
