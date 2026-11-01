@@ -41,7 +41,7 @@ sealed class SparkWindow:Window {
   Closed+=(_,__)=>{foreach(var stream in uploads.Values)stream.Dispose();view.Dispose();};
  }
  async Task Initialize(string[] args){try{
-  Directory.CreateDirectory(profile);var env=await CoreWebView2Environment.CreateAsync(null,profile,new CoreWebView2EnvironmentOptions());await view.EnsureCoreWebView2Async(env);
+  Directory.CreateDirectory(profile);var options=new CoreWebView2EnvironmentOptions();if(qa)options.AdditionalBrowserArguments="--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows";var env=await CoreWebView2Environment.CreateAsync(null,profile,options);await view.EnsureCoreWebView2Async(env);
   var core=view.CoreWebView2;core.Settings.AreDefaultContextMenusEnabled=false;core.Settings.AreDefaultScriptDialogsEnabled=false;core.Settings.IsStatusBarEnabled=false;core.Settings.AreDevToolsEnabled=qa;
   core.SetVirtualHostNameToFolderMapping("sparkworld.local",webRoot,CoreWebView2HostResourceAccessKind.DenyCors);
   core.NavigationStarting+=(_,e)=>{if(!Uri.TryCreate(e.Uri,UriKind.Absolute,out var u)||u.Scheme!="https"||u.Host!="sparkworld.local")e.Cancel=true;};
