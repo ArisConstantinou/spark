@@ -1,0 +1,61 @@
+// Executed only by the explicitly requested, offscreen Windows QA mode.
+(async()=>{
+ const report={status:'RUNNING',checks:[],errors:[]},$=s=>document.querySelector(s);
+ const check=(ok,name)=>{if(!ok)throw Error(name);report.checks.push(name);};
+ const wait=async fn=>{const end=performance.now()+120000;while(!await fn()){if(performance.now()>end)throw Error('Timed out waiting for desktop state.');await new Promise(r=>setTimeout(r,80));}};
+ try{
+  const platform=await import('./platform.js'),model=await import('./model.js');
+  check(platform.desktop,'Native Windows bridge selected');
+  check((await platform.health()).cad,'Native CAD engine available');
+  check(document.querySelectorAll('.desktop-window-controls button').length===3,'Custom aligned window controls');
+  $('#import').click();await wait(()=>$('#file-folder'));await wait(()=>$('#desktop-file-list button'));
+  check($('#dialog-title').textContent==='Open a drawing','Custom file browser opens');
+  $('#dialog-close').click();
+  if(!window.__qaSource)throw Error('Provide a representative DWG with --dwg for desktop verification.');
+  const file=await platform.hostRequest('file.read',{path:window.__qaSource});
+  const bytes=Uint8Array.from(atob(file.base64),c=>c.charCodeAt(0));
+  await fyp.importFile(new File([bytes],file.name));
+  await wait(()=>fyp.document.cad?.items.length>0);$('#dialog-close').click();
+  await wait(()=>fyp.renderer.ready&&!fyp.renderer.pending);
+  let doc=fyp.document;report.primitives=doc.cad.items.length;report.coverage=doc.cad.coverage;
+  check(doc.cad.original.length===file.base64.length,'Original source bytes retained');
+  const item=doc.cad.items.find(i=>i.kind==='path'&&!i.fill&&i.layer==='A3'&&Math.abs(i.bounds[2]-i.bounds[0]-27000000)<100&&Math.abs(i.bounds[3]-i.bounds[1]-38500000)<100);
+  if(!item)throw Error('Representative sheet boundary was not found.');
+  const center=[(item.bounds[0]+item.bounds[2])/2,(item.bounds[1]+item.bounds[3])/2];
+  let r=$('#canvas').getBoundingClientRect(),v=fyp.view;
+  $('#viewport').dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:-Math.log(25)/.0012,clientX:r.x+v.x+center[0]*v.k,clientY:r.y+v.y+center[1]*v.k}));
+  await new Promise(requestAnimationFrame);v=fyp.view;
+  const mouse=async(type,x,y,button='none',buttons=0)=>platform.hostRequest('qa.pointer',{type,x,y,button,buttons,clickCount:type==='mouseMoved'?0:1});
+  await mouse('mousePressed',r.x+v.x+center[0]*v.k,r.y+v.y+center[1]*v.k,'middle',4);
+  await mouse('mouseMoved',r.x+r.width/2,r.y+r.height/2,'middle',4);await mouse('mouseReleased',r.x+r.width/2,r.y+r.height/2,'middle');
+  await wait(()=>fyp.renderer.ready&&!fyp.renderer.pending);v=fyp.view;
+  let x=r.x+v.x+item.bounds[0]*v.k,y=r.y+v.y+(item.bounds[1]+(item.bounds[3]-item.bounds[1])*.4)*v.k;
+  await mouse('mousePressed',x,y,'left',1);await mouse('mouseReleased',x,y,'left');
+  check(!!$('#cad-selected-info'),'Actual source CAD selected with pointer input');
+  const owner=fyp.selection&&fyp.document.cad.items.find(i=>i.id===fyp.selection.id)?.owner;
+  $('#cad-move-x').value='1000';$('#cad-move-y').value='2000';$('#apply-cad-move').click();
+  check(fyp.document.cadMoves[owner]?.dx===1000,'Source offset applied');
+  $('#undo').click();check(!fyp.document.cadMoves[owner],'Source movement undo');
+  $('#redo').click();check(fyp.document.cadMoves[owner]?.dy===2000,'Source movement redo');
+  const target=fyp.document.cad.items.find(i=>i.owner===owner),before=target.bounds;
+  doc=fyp.document;
+  const native=await platform.exportCad({factor:doc.cad.factor,original:doc.cad.original,originalFormat:'dwg',cadMoves:doc.cadMoves,segments:[],labels:[]},'dwg');
+  const roundtrip=await platform.importCad(native,'dwg');
+  const moved=roundtrip.items.find(i=>i.id===target.id)||roundtrip.items.find(i=>i.owner===owner&&i.kind===target.kind);
+  check(!!moved&&Math.abs(moved.bounds[0]-before[0]-1000)<.1&&Math.abs(moved.bounds[1]-before[1]-2000)<.1,'Real DWG source movement survives native export');
+  check(roundtrip.items.length===doc.cad.items.length,'Real DWG display coverage preserved');
+  // Add and move an electrical point in the actual viewport using its existing tools.
+  $('#fit-cad-selection')?.click();$('#dialog-close').click();r=$('#canvas').getBoundingClientRect();
+  document.querySelector('[data-tool="place"]').click();x=r.x+r.width*.55;y=r.y+r.height*.5;
+  await mouse('mousePressed',x,y,'left',1);await mouse('mouseReleased',x,y,'left');
+  check(fyp.document.objects.length===1,'Type G electrical symbol added');
+  const point=fyp.document.objects[0];$('#prop-x').value=String(point.x+100);$('#prop-x').dispatchEvent(new Event('change'));
+  check(fyp.document.objects[0].x===point.x+100,'Electrical point moved through inspector');
+  await fyp.save(false);check($('#save-status').textContent.includes('Saved'),'Desktop project persisted');
+  const restored=model.validate(JSON.parse(JSON.stringify(fyp.document)));check(restored.cadMoves[owner]?.dx===1000&&restored.objects.length===1,'Portable project retains CAD edits and additions');
+  let rejected=false;try{await platform.importCad(new TextEncoder().encode('not CAD'),'dwg');}catch{rejected=true;}check(rejected,'Corrupt DWG rejected without replacing project');
+  check(fyp.document.objects.length===1,'Project survives failed CAD operation');
+  document.querySelector('[data-tool="select"]').click();report.status='PASS';
+ }catch(e){report.status='FAIL';report.error=e.stack||e.message;}
+ window.__sparkQa=report;
+})();

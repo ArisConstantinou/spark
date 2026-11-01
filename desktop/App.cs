@@ -22,6 +22,8 @@ sealed class SparkWindow:Window {
  readonly WebView2 view=new WebView2();readonly string profile,webRoot;readonly bool qa;
  readonly Dictionary<string,MemoryStream> uploads=new Dictionary<string,MemoryStream>();
  readonly SemaphoreSlim cadGate=new SemaphoreSlim(1,1);bool closing;
+ readonly HashSet<string> sources=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+ [DllImport("user32.dll")]static extern IntPtr GetForegroundWindow();
  [DllImport("user32.dll")]static extern bool ReleaseCapture();
  [DllImport("user32.dll")]static extern IntPtr SendMessage(IntPtr h,int message,IntPtr w,IntPtr l);
  [DllImport("user32.dll")]static extern short GetAsyncKeyState(int key);
@@ -57,6 +59,7 @@ sealed class SparkWindow:Window {
   using var parsed=JsonDocument.Parse(json);var root=parsed.RootElement;id=root.GetProperty("id").GetString()??"";string method=root.GetProperty("method").GetString()??"";var a=root.GetProperty("args");object? result;
   switch(method){
    case "app.info":result=new{name="SparkWorld",creator="Aris",version="0.2.0",cad=true,mode="desktop",decoder="ACadSharp 3.6.51 · native Windows"};break;
+   case "qa.pointer":if(!qa)throw new InvalidOperationException("QA is disabled.");await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",a.GetRawText());result=true;break;
    case "window.minimize":WindowState=WindowState.Minimized;result=true;break;
    case "window.maximize":WindowState=WindowState==WindowState.Maximized?WindowState.Normal:WindowState.Maximized;result=true;break;
    case "window.drag":if(GetAsyncKeyState(1)<0){ReleaseCapture();SendMessage(new WindowInteropHelper(this).Handle,0xA1,new IntPtr(2),IntPtr.Zero);}result=true;break;
@@ -67,8 +70,8 @@ sealed class SparkWindow:Window {
    case "cad.import":case "cad.export":{
     if(!await cadGate.WaitAsync(0))throw new IOException("Another CAD operation is running.");try{var bytes=Upload(a).ToArray();string format=a.GetProperty("format").GetString()!;result=await Task.Run<object>(()=>method=="cad.import"?JsonSerializer.Deserialize<JsonElement>(CadEngine.Import(bytes,format)):(object)new{base64=Convert.ToBase64String(CadEngine.Export(bytes,format))});}finally{cadGate.Release();}break;
    }
-   case "file.list":result=ListFiles(a);break;
-   case "file.read":{string path=ReadPath(a);var info=new FileInfo(path);if(info.Length>128L*1024*1024)throw new IOException("File exceeds the import limit.");result=new{name=info.Name,base64=Convert.ToBase64String(await Task.Run(()=>File.ReadAllBytes(path)))};break;}
+   case "file.list":result=await Task.Run(()=>ListFiles(a));break;
+   case "file.read":{string path=ReadPath(a);var info=new FileInfo(path);if(info.Length>128L*1024*1024)throw new IOException("File exceeds the import limit.");var data=await Task.Run(()=>File.ReadAllBytes(path));sources.Add(info.FullName);result=new{name=info.Name,base64=Convert.ToBase64String(data)};break;}
    case "file.stat":{string path=ReadPath(a);var info=new FileInfo(path);result=new{exists=info.Exists,stamp=info.Exists?info.LastWriteTimeUtc.Ticks.ToString():"",length=info.Exists?info.Length:0};break;}
    case "file.save":result=await SaveFile(a);break;
    default:throw new InvalidOperationException("Unsupported desktop action.");
@@ -80,18 +83,39 @@ sealed class SparkWindow:Window {
  object ListFiles(JsonElement a){
   string requested=a.TryGetProperty("path",out var p)?p.GetString()??"":"",path=string.IsNullOrWhiteSpace(requested)?Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments):Path.GetFullPath(requested);
   if(path.StartsWith(@"\\",StringComparison.Ordinal))throw new IOException("Use a local drive path.");
-  var directory=new DirectoryInfo(path);var entries=directory.EnumerateFileSystemInfos().Where(e=>(e.Attributes&(FileAttributes.Hidden|FileAttributes.System))==0).OrderBy(e=>e is DirectoryInfo?0:1).ThenBy(e=>e.Name,StringComparer.OrdinalIgnoreCase).Take(2000).Select(e=>new{name=e.Name,path=e.FullName,directory=e is DirectoryInfo,length=e is FileInfo file?file.Length:0,extension=e.Extension}).ToArray();
-  return new{path=directory.FullName,parent=directory.Parent?.FullName,entries,shortcuts=new[]{new{name="Documents",path=Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)},new{name="Downloads",path=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"Downloads")},new{name="Desktop",path=Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)}}.Concat(DriveInfo.GetDrives().Where(d=>d.IsReady).Select(d=>new{name=d.Name,path=d.RootDirectory.FullName})).ToArray()};
+  string query=a.TryGetProperty("query",out var q)?q.GetString()??"":"";
+  var directory=new DirectoryInfo(path);var matches=directory.EnumerateFileSystemInfos().Where(e=>(e.Attributes&(FileAttributes.Hidden|FileAttributes.System))==0&&e.Name.IndexOf(query,StringComparison.OrdinalIgnoreCase)>=0).OrderBy(e=>e is DirectoryInfo?0:1).ThenBy(e=>e.Name,StringComparer.OrdinalIgnoreCase).Take(2001).ToArray();
+  var entries=matches.Take(2000).Select(e=>new{name=e.Name,path=e.FullName,directory=e is DirectoryInfo,length=e is FileInfo file?file.Length:0,extension=e.Extension}).ToArray();
+  return new{path=directory.FullName,parent=directory.Parent?.FullName,entries,truncated=matches.Length>2000,shortcuts=new[]{new{name="Documents",path=Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)},new{name="Downloads",path=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"Downloads")},new{name="Desktop",path=Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)}}.Concat(DriveInfo.GetDrives().Where(d=>d.IsReady).Select(d=>new{name=d.Name,path=d.RootDirectory.FullName})).ToArray()};
  }
  async Task<object> SaveFile(JsonElement a){
   string path=ReadPath(a);var info=new FileInfo(path);string expected=a.TryGetProperty("stamp",out var stamp)?stamp.GetString()??"":"";
+  if(sources.Contains(info.FullName))throw new IOException("Choose a different destination to preserve the imported source file.");
   if(info.Exists&&expected!=info.LastWriteTimeUtc.Ticks.ToString())throw new IOException("The destination changed. Review it again before overwriting.");
   var bytes=Upload(a).ToArray();if(!Directory.Exists(info.DirectoryName))throw new IOException("Choose an existing destination folder.");
-  using(var file=new FileStream(path,info.Exists?FileMode.Truncate:FileMode.CreateNew,FileAccess.Write,FileShare.None))await file.WriteAsync(bytes,0,bytes.Length);return new{path=info.FullName,bytes=bytes.Length};
+  string temporary=path+".sparkworld-writing";bool created=false;
+  try{using(var file=new FileStream(temporary,FileMode.CreateNew,FileAccess.Write,FileShare.None)){created=true;await file.WriteAsync(bytes,0,bytes.Length);file.Flush(true);}
+   info.Refresh();if(info.Exists){if(expected!=info.LastWriteTimeUtc.Ticks.ToString())throw new IOException("The destination changed. Review it again before overwriting.");File.Replace(temporary,path,null);}else{if(expected.Length>0)throw new IOException("The destination was removed. Choose the file again.");File.Move(temporary,path);}
+  }finally{if(created&&File.Exists(temporary))File.Delete(temporary);}return new{path=info.FullName,bytes=bytes.Length};
  }
  void Reply(string id,object? result,string? error=null){
   string json=JsonSerializer.Serialize(new{id,result,error});if(json.Length<262144){view.CoreWebView2.PostWebMessageAsJson(json);return;}
   string data=JsonSerializer.Serialize(result);for(int n=0;n<data.Length;n+=131072)view.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new{id,chunk=data.Substring(n,Math.Min(131072,data.Length-n))}));view.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new{id,chunked=true}));
  }
- async Task RunQa(string[] args){await Task.Delay(1000);}
+ async Task RunQa(string[] args){
+  int arg=Array.IndexOf(args,"--qa-output");if(arg<0||arg+1>=args.Length)throw new ArgumentException("QA requires --qa-output.");string output=Path.GetFullPath(args[arg+1]);Directory.CreateDirectory(output);
+  var foreground=GetForegroundWindow();var watch=Stopwatch.StartNew();
+  try{
+   while(await view.CoreWebView2.ExecuteScriptAsync("!!window.fyp")!="true"){if(watch.Elapsed.TotalSeconds>45)throw new TimeoutException("Desktop interface did not initialize.");await Task.Delay(100);}
+   int fileArg=Array.IndexOf(args,"--dwg");string source=fileArg>=0&&fileArg+1<args.Length?args[fileArg+1]:"";
+   await view.CoreWebView2.ExecuteScriptAsync("window.__qaSource="+JsonSerializer.Serialize(source));
+   string script=File.ReadAllText(Path.Combine(webRoot,"desktop-qa.js"));await view.CoreWebView2.ExecuteScriptAsync(script);
+   string result;do{await Task.Delay(250);result=await view.CoreWebView2.ExecuteScriptAsync("window.__sparkQa?JSON.stringify(window.__sparkQa):null");if(watch.Elapsed.TotalSeconds>240)throw new TimeoutException("Desktop QA timed out.");}while(result=="null");
+   string report=JsonSerializer.Deserialize<string>(result)!;using var parsed=JsonDocument.Parse(report);
+   File.WriteAllText(Path.Combine(output,"desktop-qa.json"),report);using(var image=File.Create(Path.Combine(output,"desktop-qa.png")))await view.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,image);
+   bool unchanged=foreground==GetForegroundWindow();File.WriteAllText(Path.Combine(output,"desktop-focus.json"),JsonSerializer.Serialize(new{unchanged,elapsedSeconds=watch.Elapsed.TotalSeconds}));
+   Environment.ExitCode=parsed.RootElement.GetProperty("status").GetString()=="PASS"&&unchanged?0:1;
+  }catch(Exception e){File.WriteAllText(Path.Combine(output,"desktop-qa.json"),JsonSerializer.Serialize(new{status="FAIL",error=e.ToString()}));Environment.ExitCode=1;}
+  finally{closing=true;Close();}
+ }
 }

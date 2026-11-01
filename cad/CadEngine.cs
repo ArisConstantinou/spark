@@ -4,6 +4,7 @@ using ACadSharp.IO;
 using ACadSharp.Tables;
 using CSMath;
 using System.Globalization;
+using System.IO;
 using System.Text.Json;
 
 public static class CadEngine {
