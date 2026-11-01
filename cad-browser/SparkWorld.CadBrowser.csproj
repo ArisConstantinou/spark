@@ -4,12 +4,16 @@
     <AssemblyName>SparkWorld.CadBrowser</AssemblyName><AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><LangVersion>latest</LangVersion>
     <WasmEnableHotReload>false</WasmEnableHotReload><WasmBuildNative>true</WasmBuildNative>
-    <RunAOTCompilation>false</RunAOTCompilation><PublishTrimmed>false</PublishTrimmed>
+    <RunAOTCompilation>true</RunAOTCompilation><PublishTrimmed>true</PublishTrimmed>
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
     <OverrideHtmlAssetPlaceholders>false</OverrideHtmlAssetPlaceholders>
     <InvariantGlobalization>true</InvariantGlobalization>
     <WasmMainJSPath>main.js</WasmMainJSPath>
   </PropertyGroup>
   <ItemGroup>
+    <!-- The CAD decoder and scene serializer use runtime type/property metadata. -->
+    <TrimmerRootAssembly Include="ACadSharp" />
+    <TrimmerRootAssembly Include="SparkWorld.CadBrowser" />
     <PackageReference Include="ACadSharp" Version="3.6.51" />
     <Compile Include="../cad/CadEngine.cs" Link="CadEngine.cs" />
     <Compile Include="../cad/CadScene.cs" Link="CadScene.cs" />
