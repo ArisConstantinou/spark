@@ -1,0 +1,40 @@
+// Tests the distributed browser CAD engine, not a mocked transport.
+const fs=require('node:fs/promises');
+module.exports=async function nativeElectrical({page,url,fixture,check}){
+ await page.goto(url);await page.waitForFunction(()=>window.sparkCadStudio,{},{timeout:120000});
+ const call=(request,write=false)=>page.evaluate(({request,write})=>write?sparkCadStudio.mutation(request):sparkCadStudio.read(request),{request,write});
+ async function notices(){const state=await call({op:'state'});if(state.modal){check(/GpuWarning/.test(JSON.stringify(state.modal)),'Electrical native test only acknowledges the known CI graphics warning');await call({op:'action',name:'close_modal'},true);}}
+ await notices();const bytes=await fs.readFile(fixture);
+ await call({op:'open',name:'electrical-source.dwg',data_base64:bytes.toString('base64')},true);await notices();await call({op:'run',cmd:'TILEMODE 1'},true);
+ const sourceLayers=await call({op:'records',collection:'layers',limit:10000});
+ await page.evaluate(async()=>{const {NativeElectrical}=await import('./native-electrical.js');window.testElectrical=new NativeElectrical(sparkCadStudio);await testElectrical.prepare();});
+ const definitions=await page.evaluate(()=>testElectrical.definitions());
+ check(Object.keys(definitions.blocks).length===13,'Native electrical adapter defines all 13 library symbols');
+ const placed=await page.evaluate(async()=>{const {SYMBOLS}=await import('./model.js');const bindings=[];for(const [i,symbol] of SYMBOLS.entries())bindings.push(await testElectrical.place({id:'native-'+i,type:symbol.id,x:1000+i*150,y:2000,size:90,rotation:0}));return bindings;});
+ const handles=placed.map(p=>p.handle),geometry=await call({op:'query',handles,detail:'geometry',limit:100});
+ check(geometry.entities.length===13&&geometry.entities.every(e=>e.space.toUpperCase()==='*MODEL_SPACE'),'All library symbols are native model-space block instances');
+ check(geometry.entities.every((e)=>e.position[1]===-2000),'Electrical coordinate conversion retains the correct CAD Y direction');
+ await call({op:'undo'},true);check((await call({op:'query',handles:[handles.at(-1)]})).entities.length===0,'Native Undo removes a complete electrical symbol');
+ await call({op:'redo'},true);check((await call({op:'query',handles:[handles.at(-1)]})).entities.length===1,'Native Redo restores a complete electrical symbol');
+ await page.evaluate(h=>testElectrical.move([h],25,40),handles[0]);
+ const moved=(await call({op:'query',handles:[handles[0]],detail:'geometry'})).entities[0];check(moved.position[0]===1025&&moved.position[1]===-2040,'Movement acts on the complete native symbol block');
+ const point={id:placed[0].id,type:placed[0].type,label:'Φωτιστικό ⚡',circuit:'C1',height:2300,note:'Ελληνικό κείμενο ⚡ '.repeat(60)};
+ await page.evaluate(({binding,point})=>testElectrical.writeMetadata(binding,point),{binding:placed[0],point});
+ await call({op:'undo'},true);
+ check((await page.evaluate(h=>testElectrical.readMetadata([h]),handles[0])).length===0&&(await call({op:'query',handles:[handles[0]]})).entities.length===1,'Metadata Undo removes the metadata edit while preserving its symbol');
+ await call({op:'redo'},true);
+ const save=await call({op:'save',name:'electrical-shared.dwg',target_format:'dwg',target_version:'AC1032'},true),output=save.result||save;
+ check(!output.dropped_on_save&&Buffer.from(output.data_base64,'base64').subarray(0,6).toString()==='AC1032','Electrical symbols export in a genuine native DWG');
+ await call({op:'open',name:'electrical-shared.dwg',data_base64:output.data_base64},true);await notices();await call({op:'run',cmd:'TILEMODE 1'},true);
+ const reopened=await call({op:'query',handles,detail:'geometry',limit:100});check(reopened.entities.length===13&&reopened.entities.every(e=>e.block===placed.find(p=>p.handle===e.handle)?.block),'All electrical instances and definition references survive DWG reopen');
+ await page.evaluate(d=>testElectrical.restoreDefinitions(d),definitions);
+ const metadata=await page.evaluate(h=>testElectrical.readMetadata([h]),handles[0]);check(metadata[0]?.metadata.note===point.note&&metadata[0]?.metadata.label===point.label&&metadata[0]?.metadata.circuit===point.circuit,'Long Unicode metadata and circuit association survive native roundtrip');
+ const finalLayers=await call({op:'records',collection:'layers',limit:10000}),names=new Set(finalLayers.records.map(r=>r.name));check(sourceLayers.records.every(r=>names.has(r.name)),'Original source layers remain in the common native document');
+ const before=(await call({op:'query',handles,detail:'geometry',limit:100})).entities;
+ await page.evaluate(async()=>{try{await testElectrical.place({type:'ceiling',id:'bad',x:0,y:0,size:90,rotation:0},{millimetresPerUnit:0});return false;}catch{return true;}}).then(rejected=>check(rejected,'Invalid drawing units are rejected before native mutation'));
+ check(JSON.stringify((await call({op:'query',handles,detail:'geometry',limit:100})).entities)===JSON.stringify(before),'Rejected placement preserves existing native geometry');
+ await call({op:'new'},true);await notices();
+ const rejected=await page.evaluate(async()=>{try{await testElectrical.mutate({op:'entities_create',entities:[{type:'Circle',center:[0,0],radius:1}]});return false;}catch{return true;}});
+ check(rejected&&(await call({op:'query',limit:1})).count===0,'Switching drawings cannot redirect an electrical edit into the wrong document');
+ await page.close();
+};
