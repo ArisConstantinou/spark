@@ -2,10 +2,25 @@
 
 ## Current implementation boundary
 
-The Electrical workspace and the embedded CAD Studio are still separate pages
-with separate saved state. `native-electrical.js` is a tested integration adapter;
-it is not yet connected to production palette or navigation controls. Adding it
-does not make the existing pages a single editor.
+The published Electrical workspace and separate CAD Studio remain the current
+production route. The candidate main-page route `?workspace=cad` reuses the
+complete ready-made editor and adds the SparkWorld project browser, electrical
+palette, circuit metadata, native layers, compact selection and explicit Details.
+The full native CAD tools remain available in that same page.
+
+The candidate saves native DWG geometry and electrical metadata together in a
+`sparkworld/cad-v2` project. Original file bytes are retained separately from the
+working snapshot. Complete project JSON includes circuits and point notes; the
+native DWG copy contains CAD geometry and does not yet carry the complete circuit
+schedule and metadata from this UI. The older project database is preserved;
+copy-on-import migrates native-source movements, symbols, routes and measurements.
+
+The candidate has passed local browser checks with a synthetic fixture and a
+real 60-layer private drawing. It is still under acceptance, not the default
+published workspace. Initial import and preparation took about 54 seconds for
+that drawing in local headless Chromium. This is not physical-mobile performance
+proof. Kilometre and unknown-unit imports require explicit unit confirmation
+before placing symbols with millimetre sizes.
 
 ## Implemented foundation
 
@@ -41,11 +56,12 @@ drawings and their exports remain local.
    bytes. Migration must be explicit and reversible without overwriting them.
 2. Present the existing custom palette, searchable layers, circuits, compact
    selection and explicit Details around that canvas.
-3. Link native block positions and electrical metadata to the same project
-   history. Preparing library definitions currently adds engine undo entries;
-   those setup entries must not appear as user editing actions.
-4. Save and restore the native snapshot plus electrical project metadata together.
-   Circuit IDs in entity XData are not the complete circuit schedule.
+3. Finish metadata-aware history and native copying/deletion semantics. Library
+   setup is already saved/reopened as a baseline, so a placed symbol is removed
+   by one native Undo without exposing setup instances.
+4. Complete interoperability and acceptance of the v2 project format, including
+   large backups and migration. Native snapshot plus metadata already save and
+   reload together in the candidate; native DWG alone is not the full project.
 5. Verify direct pointer placement, selection, drag, measurements, routes,
    layer dependencies and mobile gestures through the actual unified UI.
 6. Reproduce the reported file-specific omissions with the actual source file.
@@ -57,3 +73,12 @@ including `batch`, `view_focus` and GUI-only `capture`. Integration must use tes
 operations and must not assume an advertised capability provides a transaction.
 See the [upstream automation specification](https://github.com/HakanSeven12/OpenCADStudio/blob/v2026.44/docs/automation/API-SPEC.md)
 and the actual browser acceptance tests.
+
+
+## Rejected transfer optimization
+
+The pinned browser `entities_copy_to` operation copies Insert records without
+copying their referenced block definitions. A target query can therefore show
+an Insert while its definition is absent. The candidate does not use that
+operation to install the electrical library. Block-table and roundtrip checks
+are required; an Insert count alone is insufficient evidence.
