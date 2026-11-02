@@ -20,6 +20,10 @@ Select CAD paths, text or fills to inspect source identity and bounds. Dragging 
 
 Place, move, rotate and duplicate electrical points. Set references, mounting heights and circuit membership. Draw routes with successive clicks and Enter. Routes and measurements can be selected and dragged.
 
+On touch screens, tap to select/place, drag an unselected area to pan, and pinch with two fingers to zoom. Drag an already selected object to move it. **Finish wire** completes a route without a keyboard. Mobile **More** includes Undo, Redo and Snap.
+
+**Layers** lists the complete source table. Search a layer and use **Reveal & fit** to enable the block dependencies that hide its supported geometry and bring it into view. **Show all** and **Source state** change the view with undo support. Rows disclose paper-only, invisible-source and unsupported content. Older saved projects offer **Refresh CAD view**, preserving electrical edits and layer choices. Layer visibility is a view override; native export retains the original source layer flags. See [CAD integration and limits](docs/cad-integration.md).
+
 Export JSON, SVG, PNG, circuit CSV, DWG or DXF. Native export applies source movements and adds annotations on `SPARKWORLD_ELECTRICAL`. DWG uses 2018/AC1032. Keep the original and compare the new drawing in the intended CAD software.
 
 V select · W wire · M measure · F fit · R rotate point · Ctrl Z undo · Ctrl Shift Z redo · Ctrl S save. Middle drag or Space+drag pans; the wheel zooms at the pointer. Delete removes electrical additions.

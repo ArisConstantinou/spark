@@ -45,9 +45,30 @@ Test("Arc",()=>new Arc{Center=new XYZ(20,30,0),Radius=7,StartAngle=.2,EndAngle=2
 var emptyRequest=new{factor=1,original="",originalFormat="dwg",segments=new[]{new{a=new[]{0,0},b=new[]{1000,0}}},labels=new[]{new{x=10,y=20,height=5,text="SparkWorld verification"}}};
 var added=CadEngine.Export(JsonSerializer.SerializeToUtf8Bytes(emptyRequest),"dwg");using(var scene=JsonDocument.Parse(CadEngine.Import(added,"dwg")))Assert(scene.RootElement.GetProperty("items").EnumerateArray().Any(i=>i.TryGetProperty("text",out var t)&&t.GetString()=="SparkWorld verification"),"Added annotations missing.");passed.Add("New vector annotations survive native DWG export");
 bool rejected=false;try{CadEngine.Import(Encoding.UTF8.GetBytes("not CAD"),"dwg");}catch{rejected=true;}Assert(rejected,"Corrupt input was accepted.");passed.Add("Corrupt DWG fails explicitly");
+CadDocument LayerFixture(){
+ var doc=new CadDocument();doc.Header.InsUnits=ACadSharp.Types.Units.UnitsType.Millimeters;
+ var parent=new Layer("Block placement"){IsOn=false};var child=new Layer("Electrical symbols");var viewport=new Layer("New viewport only"){Flags=LayerFlags.FrozenNewViewports};var frozen=new Layer("Globally frozen"){Flags=LayerFlags.Frozen};var paper=new Layer("Paper geometry");var invisible=new Layer("Invisible source");
+ foreach(var l in new[]{parent,child,viewport,frozen,paper,invisible,new Layer("Unused layer")})doc.Layers.Add(l);
+ var block=new BlockRecord("Layer visibility fixture");block.Entities.Add(new Line{Layer=child,StartPoint=XYZ.Zero,EndPoint=new XYZ(500,300,0)});block.Entities.Add(new ACadSharp.Entities.Point{Layer=invisible,Location=new XYZ(100,100,0)});doc.Entities.Add(new Insert(block){Layer=parent,InsertPoint=new XYZ(2000,3000,0)});
+ doc.Entities.Add(new Circle{Layer=viewport,Center=new XYZ(4000,3000,0),Radius=300});doc.Entities.Add(new Line{Layer=frozen,StartPoint=new XYZ(5000,3000,0),EndPoint=new XYZ(5500,3300,0)});
+ doc.Entities.Add(new Line{Layer=invisible,IsInvisible=true,StartPoint=new XYZ(6000,3000,0),EndPoint=new XYZ(6500,3300,0)});doc.PaperSpace.Entities.Add(new Line{Layer=paper,StartPoint=XYZ.Zero,EndPoint=new XYZ(100,100,0)});
+ return doc;
+}
+var layerFixture=LayerFixture();var layerBytes=Dxf(layerFixture);using(var parsed=JsonDocument.Parse(CadEngine.Import(layerBytes,"dxf"))){
+ var scene=parsed.RootElement;var list=scene.GetProperty("layers").EnumerateArray().ToDictionary(l=>l.GetProperty("name").GetString()!);
+ Assert(list.Count==layerFixture.Layers.Count,"Unused and paper-only layers were dropped from inventory.");passed.Add("Complete source layer table includes unused and paper-only layers");
+ Assert(list["New viewport only"].GetProperty("visible").GetBoolean(),"New viewport freeze incorrectly hides model geometry.");Assert(!list["Globally frozen"].GetProperty("visible").GetBoolean(),"Global freeze default was lost.");passed.Add("New-viewport freeze is distinct from global freeze");
+ var part=scene.GetProperty("items").EnumerateArray().First(i=>i.GetProperty("layer").GetString()=="Electrical symbols");var deps=part.GetProperty("visibilityLayers").EnumerateArray().Select(x=>x.GetString()).ToArray();Assert(deps.Contains("Block placement")&&deps.Contains("Electrical symbols"),"Block layer dependency was lost.");passed.Add("Child layer geometry retains its hidden placement-layer dependency");
+ Assert(list["Paper geometry"].GetProperty("paperObjects").GetInt32()==1,"Paper-space coverage was not identified.");Assert(scene.GetProperty("invisibleByLayer").GetProperty("Invisible source").GetInt32()==1,"Invisible source omission was not disclosed.");passed.Add("Paper-only and invisible-source geometry have explicit coverage reasons");
+ Assert(scene.GetProperty("unsupportedByLayer").GetProperty("Block placement").GetProperty("Point").GetInt32()==1,"An unsupported child was not attributed to its controlling placement layer.");passed.Add("Unsupported block content explains parent-layer omissions");
+}
 Console.WriteLine(JsonSerializer.Serialize(new{status="PASS",checks=passed}));
 if(args.Length==2&&args[0]=="--fixture"){
  var fixture=new CadDocument();fixture.Header.Version=ACadVersion.AC1032;fixture.Header.InsUnits=ACadSharp.Types.Units.UnitsType.Millimeters;fixture.Entities.Add(FixtureHatch(XYZ.AxisZ));fixture.Entities.Add(FixtureHatch(new XYZ(.6,0,.8)));
  var dim=new DimensionAligned(new XYZ(200,0,0),new XYZ(350,0,0)){DefinitionPoint=new XYZ(200,15,0)};fixture.Entities.Add(dim);dim.UpdateBlock();
  using var fixtureBytes=new MemoryStream();using(var writer=new DwgWriter(fixtureBytes,fixture))writer.Write();File.WriteAllBytes(args[1],fixtureBytes.ToArray());
+ layerFixture.Header.Version=ACadVersion.AC1032;using var layerOutput=new MemoryStream();using(var writer=new DwgWriter(layerOutput,layerFixture))writer.Write();File.WriteAllBytes(Path.Combine(Path.GetDirectoryName(args[1])!,"layer-fixture.dwg"),layerOutput.ToArray());
+}
+if(args.Length==2&&args[0]=="--layer-fixture"){
+ layerFixture.Header.Version=ACadVersion.AC1032;using var bytes=new MemoryStream();using(var writer=new DwgWriter(bytes,layerFixture))writer.Write();File.WriteAllBytes(args[1],bytes.ToArray());
 }

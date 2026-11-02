@@ -15,6 +15,8 @@ partial class Scene(CadDocument document,List<string> notices) {
     readonly List<double[]> all=[];
     readonly Dictionary<Entity,string[]> visibility=[];
     readonly Dictionary<string,int> coverage=[];
+    readonly Dictionary<string,Dictionary<string,int>> unsupportedByLayer=[];
+    readonly Dictionary<string,int> invisibleByLayer=[];
     double factor=1;
     int count=0;
     static object? Get(object? o,string key)=>o is IDictionary<string,object?> map?(map.TryGetValue(key,out var value)?value:null):o?.GetType().GetProperty(key)?.GetValue(o);
@@ -23,6 +25,22 @@ partial class Scene(CadDocument document,List<string> notices) {
     static IEnumerable<object> Many(object? o)=>o is IEnumerable list?list.Cast<object>():[];
     static string F(double n)=>n.ToString("0.#####",CultureInfo.InvariantCulture);
     static double[] Mul(double[] a,double[] b)=>[a[0]*b[0]+a[2]*b[1],a[1]*b[0]+a[3]*b[1],a[0]*b[2]+a[2]*b[3],a[1]*b[2]+a[3]*b[3],a[0]*b[4]+a[2]*b[5]+a[4],a[1]*b[4]+a[3]*b[5]+a[5]];
+    void Missing(string layer,string type,string[]? dependencies=null){
+        unsupported[type]=unsupported.GetValueOrDefault(type)+1;
+        foreach(var name in (dependencies??[layer]).Distinct()){
+            if(!unsupportedByLayer.TryGetValue(name,out var types))unsupportedByLayer[name]=types=[];
+            types[type]=types.GetValueOrDefault(type)+1;
+        }
+    }
+    void RegisterLayers(){
+        var model=document.Entities.GroupBy(e=>e.Layer?.Name??"0").ToDictionary(g=>g.Key,g=>g.Count());
+        var paper=(document.Layouts?.ToArray()??[]).Where(l=>l.IsPaperSpace).SelectMany(l=>l.AssociatedBlock?.Entities??Enumerable.Empty<Entity>()).GroupBy(e=>e.Layer?.Name??"0").ToDictionary(g=>g.Key,g=>g.Count());
+        var definitions=document.BlockRecords.Where(b=>b!=document.ModelSpace&&!(b.Layout?.IsPaperSpace??false)).SelectMany(b=>b.Entities).GroupBy(e=>e.Layer?.Name??"0").ToDictionary(g=>g.Key,g=>g.Count());
+        foreach(var layer in document.Layers){
+            bool frozen=(layer.Flags&LayerFlags.Frozen)!=0;
+            layers[layer.Name]=new{name=layer.Name,visible=layer.IsOn&&!frozen,sourceOn=layer.IsOn,sourceFrozen=frozen,newViewportFrozen=(layer.Flags&LayerFlags.FrozenNewViewports)!=0,locked=(layer.Flags&LayerFlags.Locked)!=0,modelObjects=model.GetValueOrDefault(layer.Name),paperObjects=paper.GetValueOrDefault(layer.Name),definitionObjects=definitions.GetValueOrDefault(layer.Name)};
+        }
+    }
     double[] At((double x,double y) p,double[] m)=>[(p.x*m[0]+p.y*m[2]+m[4])*factor,-(p.x*m[1]+p.y*m[3]+m[5])*factor];
     void Path(Entity e,IEnumerable<(double x,double y)> points,bool close,double[] m,string owner,string layer) {
         var ps=points.Select(p=>At(p,m)).Where(p=>Numbers.Finite(p[0])&&Numbers.Finite(p[1])).ToArray();
@@ -39,11 +57,11 @@ partial class Scene(CadDocument document,List<string> notices) {
         if(depth>24){unsupported["Deep block nesting"]=1;return;}
         foreach(var e in entities) {
             if(items.Count>120000)throw new Exception("Drawing exceeds 120,000 display entities. Import a floor-specific DWG.");
-            if(e.IsInvisible)continue;
             string layer=e.Layer?.Name??"0";
             if(layer=="0"&&parent!=null)layer=parent;
+            if(e.IsInvisible){foreach(var name in (ancestors??[]).Concat(new[]{layer}).Distinct())invisibleByLayer[name]=invisibleByLayer.GetValueOrDefault(name)+1;continue;}
             var cadLayer=document.Layers.Contains(layer)?document.Layers[layer]:e.Layer;
-            if(!layers.ContainsKey(layer))layers[layer]=new{name=layer,visible=(cadLayer?.IsOn??true)&& !((cadLayer?.Flags.ToString()??"").Contains("Frozen"))};
+            if(!layers.ContainsKey(layer))layers[layer]=new{name=layer,visible=(cadLayer?.IsOn??true)&&((cadLayer?.Flags??LayerFlags.None)&LayerFlags.Frozen)==0};
             visibility[e]=(ancestors??[]).Concat(new[]{layer}).Distinct().ToArray();
             string id=owner??e.Handle.ToString();
             var type=e.GetType().Name;
@@ -72,8 +90,8 @@ partial class Scene(CadDocument document,List<string> notices) {
                 else if(e is TextEntity text) Text(e,text.Value,text.InsertPoint.X,text.InsertPoint.Y,text.Height,text.Rotation,m,id,layer);
                 else if(e is MText mt) Text(e,mt.Value,mt.InsertPoint.X,mt.InsertPoint.Y,mt.Height,0,m,id,layer);
                 else if(type=="Ellipse") {var center=Point(Get(e,"Center"));var axis=Point(Get(e,"MajorAxisEndPoint"));double a=Num(e,"StartParameter"),b=Num(e,"EndParameter",Math.PI*2),rx=Math.Sqrt(axis.x*axis.x+axis.y*axis.y);Path(e,Curve(center.x,center.y,rx,rx*Num(e,"RadiusRatio",1),a,b,Math.Atan2(axis.y,axis.x)),Math.Abs(b-a)>6.28,m,id,layer);}
-                else unsupported[type]=unsupported.GetValueOrDefault(type)+1;
-            } catch(Exception) {unsupported[type]=unsupported.GetValueOrDefault(type)+1;}
+                else Missing(layer,type,visibility[e]);
+            } catch(Exception) {Missing(layer,type,visibility[e]);}
         }
     }
     void Text(Entity e,string value,double x,double y,double h,double r,double[] m,string owner,string layer){
@@ -85,8 +103,9 @@ partial class Scene(CadDocument document,List<string> notices) {
     public object Convert(){
         int units=(int)document.Header.InsUnits;
         factor=units switch{1=>25.4,2=>304.8,4=>1,5=>10,6=>1000,7=>1000000,_=>1};
+        RegisterLayers();
         Visit(document.Entities,[1,0,0,1,0,0],null,null);
         if(items.Count==0)throw new Exception("No supported 2D model-space entities were found. Paper-space layouts and custom proxy objects may need an export from the source CAD.");
-        return new {adapterVersion=3,sourceObjects=document.Entities.Select(e=>new{handle=e.Handle.ToString(),type=e.GetType().Name,layer=e.Layer?.Name??"0"}),items,layers=layers.Values,factor,unitsKnown=units is 1 or 2 or 4 or 5 or 6 or 7,units,version=document.Header.Version.ToString(),bounds=new[]{all.Min(p=>p[0]),all.Min(p=>p[1]),all.Max(p=>p[0]),all.Max(p=>p[1])},coverage,unsupported,warnings=notices.Distinct().Take(15),textNotice="CAD text uses browser fonts. Custom SHX/BigFont appearance is not guaranteed. Curves and hatch boundaries are sampled for display; original CAD bytes are retained for export."};
+        return new {adapterVersion=4,layerInventoryVersion=1,sourceObjects=document.Entities.Select(e=>new{handle=e.Handle.ToString(),type=e.GetType().Name,layer=e.Layer?.Name??"0"}),items,layers=layers.Values,unsupportedByLayer,invisibleByLayer,layouts=(document.Layouts?.ToArray()??[]).Select(l=>new{name=l.Name,paperSpace=l.IsPaperSpace,entities=l.AssociatedBlock?.Entities.Count??0}),factor,unitsKnown=units is 1 or 2 or 4 or 5 or 6 or 7,units,version=document.Header.Version.ToString(),bounds=new[]{all.Min(p=>p[0]),all.Min(p=>p[1]),all.Max(p=>p[0]),all.Max(p=>p[1])},coverage,unsupported,warnings=notices.Distinct().Take(15),textNotice="CAD text uses browser fonts. Custom SHX/BigFont appearance is not guaranteed. Curves and hatch boundaries are sampled for display; original CAD bytes are retained for export."};
     }
 }

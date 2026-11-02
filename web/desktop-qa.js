@@ -15,10 +15,11 @@
   const file=await platform.hostRequest('file.read',{path:window.__qaSource});
   const bytes=Uint8Array.from(atob(file.base64),c=>c.charCodeAt(0));
   const initial=fyp.document,importStarted=performance.now();
-  if(initial.cad?.original!==file.base64)await fyp.importFile(new File([bytes],file.name));
+  const reuse=initial.cad?.original===file.base64&&initial.cad?.layerInventoryVersion===1;
+  if(!reuse)await fyp.importFile(new File([bytes],file.name));
   await wait(()=>fyp.document.cad?.items.length>0);$('#dialog-close').click();
   await wait(()=>fyp.renderer.ready&&!fyp.renderer.pending);
-  let doc=fyp.document;report.openMs=performance.now()-importStarted;report.reusedProject=initial.cad?.original===file.base64;report.primitives=doc.cad.items.length;report.coverage=doc.cad.coverage;const initialPoints=doc.objects.length;
+  let doc=fyp.document;report.openMs=performance.now()-importStarted;report.reusedProject=reuse;report.primitives=doc.cad.items.length;report.coverage=doc.cad.coverage;const initialPoints=doc.objects.length;
   check(doc.cad.original.length===file.base64.length,'Original source bytes retained');
   const item=doc.cad.items.find(i=>i.kind==='path'&&!i.fill&&i.layer==='A3'&&Math.abs(i.bounds[2]-i.bounds[0]-27000000)<100&&Math.abs(i.bounds[3]-i.bounds[1]-38500000)<100);
   if(!item)throw Error('Representative sheet boundary was not found.');
@@ -80,7 +81,17 @@
   const csv=await platform.hostRequest('file.read',{path:csvPath});check(atob(csv.base64).includes('Plan route length'),'Themed export picker navigates and saves a real CSV file');
   let rejected=false;try{await platform.importCad(new TextEncoder().encode('not CAD'),'dwg');}catch{rejected=true;}check(rejected,'Corrupt DWG rejected without replacing project');
   check(fyp.document.objects.length===initialPoints+1,'Project survives failed CAD operation');
-  document.querySelector('[data-tool="select"]').click();report.status='PASS';
+  document.querySelector('[data-tool="select"]').click();
+  $('#layers-nav').click();
+  check(fyp.document.cad.layerInventoryVersion===1&&fyp.document.cad.layers.length===60,'Windows complete source layer inventory');
+  $('#layers-show-all').click();await wait(()=>{const r=fyp.renderer,v=fyp.view;return r.ready&&!r.pending&&r.lastCamera?.x===v.x&&r.lastCamera?.y===v.y&&r.lastCamera?.k===v.k;});
+  check(fyp.renderer.visibleItems===fyp.document.cad.items.length,'Windows Show all reveals every supported display primitive');
+  $('#layer-search').value='E-SISTIMA SINAGERMOU';$('#layer-search').dispatchEvent(new Event('input'));
+  check(!!$('[data-reveal-layer]'),'Windows placement-layer geometry is discoverable through its child dependencies');
+  $('[data-reveal-layer]').click();await wait(()=>{const r=fyp.renderer,v=fyp.view;return r.ready&&!r.pending&&r.lastCamera?.x===v.x&&r.lastCamera?.y===v.y&&r.lastCamera?.k===v.k;});
+  check(fyp.document.objects.length===initialPoints+1,'Layer reveal preserves Windows electrical edits');
+  $('#layers-source').click();check(JSON.stringify([...fyp.document.hiddenLayers].sort())===JSON.stringify(fyp.document.cad.layers.filter(l=>!l.visible).map(l=>l.name).sort()),'Windows source-state restore');
+  report.status='PASS';
  }catch(e){report.status='FAIL';report.error=e.stack||e.message;}
  window.__sparkQa=report;
 })();

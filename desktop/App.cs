@@ -24,6 +24,7 @@ sealed class SparkWindow:Window {
  readonly Dictionary<string,MemoryStream> uploads=new Dictionary<string,MemoryStream>();
  readonly SemaphoreSlim cadGate=new SemaphoreSlim(1,1);bool closing;
  readonly HashSet<string> sources=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+ int qaActivationEvents;
  [DllImport("user32.dll")]static extern IntPtr GetForegroundWindow();
  [DllImport("user32.dll")]static extern bool ReleaseCapture();
  [DllImport("user32.dll")]static extern IntPtr SendMessage(IntPtr h,int message,IntPtr w,IntPtr l);
@@ -35,7 +36,7 @@ sealed class SparkWindow:Window {
   Title="SparkWorld · Created by Aris";Width=1440;Height=940;MinWidth=720;MinHeight=520;
   WindowStyle=WindowStyle.None;ResizeMode=ResizeMode.CanResize;Background=new SolidColorBrush(Color.FromRgb(13,21,29));
   System.Windows.Shell.WindowChrome.SetWindowChrome(this,new System.Windows.Shell.WindowChrome{CaptionHeight=0,ResizeBorderThickness=new Thickness(6),GlassFrameThickness=new Thickness(0),CornerRadius=new CornerRadius(0)});
-  if(qa){ShowActivated=false;ShowInTaskbar=false;Left=-32000;Top=-32000;}else WindowStartupLocation=WindowStartupLocation.CenterScreen;
+  if(qa){ShowActivated=false;ShowInTaskbar=false;Left=-32000;Top=-32000;Activated+=(_,__)=>qaActivationEvents++;}else WindowStartupLocation=WindowStartupLocation.CenterScreen;
   view.DefaultBackgroundColor=System.Drawing.Color.FromArgb(255,13,21,29);Content=view;
   Loaded+=async(_,__)=>await Initialize(args);
   Closing+=(s,e)=>{if(closing)return;e.Cancel=true;if(view.CoreWebView2!=null)view.CoreWebView2.PostWebMessageAsJson("{\"event\":\"close-request\"}");};
@@ -114,8 +115,13 @@ sealed class SparkWindow:Window {
    string result;do{await Task.Delay(250);result=await view.CoreWebView2.ExecuteScriptAsync("window.__sparkQa?JSON.stringify(window.__sparkQa):null");if(watch.Elapsed.TotalSeconds>240)throw new TimeoutException("Desktop QA timed out.");}while(result=="null");
    string report=JsonSerializer.Deserialize<string>(result)!;using var parsed=JsonDocument.Parse(report);
    File.WriteAllText(Path.Combine(output,"desktop-qa.json"),report);using(var image=File.Create(Path.Combine(output,"desktop-qa.png")))await view.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,image);
-   bool unchanged=foreground==GetForegroundWindow();File.WriteAllText(Path.Combine(output,"desktop-focus.json"),JsonSerializer.Serialize(new{unchanged,elapsedSeconds=watch.Elapsed.TotalSeconds}));
-   Environment.ExitCode=parsed.RootElement.GetProperty("status").GetString()=="PASS"&&unchanged?0:1;
+   // Retain the old global sentinel, but also monitor this QA window for its
+   // entire lifetime, including startup. A user changing unrelated windows is
+   // different from our application activating; activation followed by restoring
+   // the old foreground must fail even when the old before/after sentinel passes.
+   bool unchanged=foreground==GetForegroundWindow(),applicationNeverActivated=qaActivationEvents==0&&GetForegroundWindow()!=new System.Windows.Interop.WindowInteropHelper(this).Handle;
+   File.WriteAllText(Path.Combine(output,"desktop-focus.json"),JsonSerializer.Serialize(new{unchanged,applicationNeverActivated,activationEvents=qaActivationEvents,elapsedSeconds=watch.Elapsed.TotalSeconds}));
+   Environment.ExitCode=parsed.RootElement.GetProperty("status").GetString()=="PASS"&&applicationNeverActivated?0:1;
   }catch(Exception e){File.WriteAllText(Path.Combine(output,"desktop-qa.json"),JsonSerializer.Serialize(new{status="FAIL",error=e.ToString()}));Environment.ExitCode=1;}
   finally{closing=true;Close();}
  }
