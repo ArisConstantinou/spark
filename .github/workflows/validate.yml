@@ -55,7 +55,7 @@ jobs:
       - name: Report output sizes
         run: du -sh .out/browser && find .out/browser -maxdepth 3 -type f | head -40
       - name: Prepare the pinned ready-made CAD editor
-        run: python tools/prepare-cad-editor.py --output .out/site/app
+        run: python tools/prepare-cad-editor.py --output .out/site/app --verified-site https://arisconstantinou.github.io/spark/app/
       - name: Assemble the web release
         run: |
           mkdir -p .out/site/engine
