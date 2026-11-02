@@ -49,7 +49,7 @@ partial class Scene(CadDocument document,List<string> notices) {
         if(ps.Length<2)return;
         all.AddRange(ps);
         var d="M"+string.Join(" L",ps.Select(p=>F(p[0])+","+F(p[1])))+(close?" Z":"");
-        items.Add(new {id="g"+count++,owner,layer,visibilityLayers=ValueOrDefault(visibility,e)??[layer],kind="path",d,bounds=new[]{ps.Min(p=>p[0]),ps.Min(p=>p[1]),ps.Max(p=>p[0]),ps.Max(p=>p[1])}});
+        items.Add(new {id="g"+count++,owner,layer,visibilityLayers=ValueOrDefault(visibility,e)??[layer],kind="path",sourceType=e.GetType().Name,d,bounds=new[]{ps.Min(p=>p[0]),ps.Min(p=>p[1]),ps.Max(p=>p[0]),ps.Max(p=>p[1])}});
     }
     static IEnumerable<(double x,double y)> Curve(double cx,double cy,double rx,double ry,double a,double b,double rotation=0) {
         int n=Math.Max(8,Math.Min(120,(int)Math.Ceiling(Math.Abs(b-a)*18)));
@@ -108,6 +108,6 @@ partial class Scene(CadDocument document,List<string> notices) {
         RegisterLayers();
         Visit(document.Entities,[1,0,0,1,0,0],null,null);
         if(items.Count==0)throw new Exception("No supported 2D model-space entities were found. Paper-space layouts and custom proxy objects may need an export from the source CAD.");
-        return new {adapterVersion=4,layerInventoryVersion=1,sourceObjects=document.Entities.Select(e=>new{handle=e.Handle.ToString(),type=e.GetType().Name,layer=e.Layer?.Name??"0"}),items,layers=layers.Values,unsupportedByLayer,invisibleByLayer,layouts=(document.Layouts?.ToArray()??[]).Select(l=>new{name=l.Name,paperSpace=l.IsPaperSpace,entities=l.AssociatedBlock?.Entities.Count??0}),factor,unitsKnown=units is 1 or 2 or 4 or 5 or 6 or 7,units,version=document.Header.Version.ToString(),bounds=new[]{all.Min(p=>p[0]),all.Min(p=>p[1]),all.Max(p=>p[0]),all.Max(p=>p[1])},coverage,unsupported,warnings=notices.Distinct().Take(15),textNotice="CAD text uses browser fonts. Custom SHX/BigFont appearance is not guaranteed. Curves and hatch boundaries are sampled for display; original CAD bytes are retained for export."};
+        return new {adapterVersion=5,layerInventoryVersion=1,sourceObjects=document.Entities.Select(e=>new{handle=e.Handle.ToString(),type=e.GetType().Name,layer=e.Layer?.Name??"0"}),items,layers=layers.Values,unsupportedByLayer,invisibleByLayer,layouts=(document.Layouts?.ToArray()??[]).Select(l=>new{name=l.Name,paperSpace=l.IsPaperSpace,entities=l.AssociatedBlock?.Entities.Count??0}),factor,unitsKnown=units is 1 or 2 or 4 or 5 or 6 or 7,units,version=document.Header.Version.ToString(),bounds=new[]{all.Min(p=>p[0]),all.Min(p=>p[1]),all.Max(p=>p[0]),all.Max(p=>p[1])},coverage,unsupported,warnings=notices.Distinct().Take(15),textNotice="CAD text uses browser fonts. Custom SHX/BigFont appearance is not guaranteed. Curves and hatch boundaries are sampled for display; original CAD bytes are retained for export."};
     }
 }

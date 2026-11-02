@@ -3,6 +3,13 @@ using CSMath;
 
 partial class Scene {
     bool TryAdvanced(Entity e,double[] m,string owner,string layer,int depth,string[] ancestors){
+        if(e is Spline spline){
+            // Use the pinned library's NURBS evaluator, including weights/fit
+            // points. Joining control points would change the source shape.
+            var points=spline.PolygonalVertexes(Math.Max(256,spline.ControlPoints.Count*24));
+            if(points.Count<2||points.Any(p=>!Numbers.Finite(p.X)||!Numbers.Finite(p.Y)))return false;
+            Path(e,points.Select(p=>(p.X,p.Y)),spline.IsClosed,m,owner,layer);return true;
+        }
         if(e is Dimension dim){
             if(dim.Block==null||dim.Block.Entities.Count==0)return false;
             int start=items.Count;

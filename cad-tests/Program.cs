@@ -42,6 +42,13 @@ Test("Patterned hatch",()=>FixtureHatch(XYZ.AxisZ));
 Test("Tilted OCS hatch",()=>FixtureHatch(new XYZ(.6,0,.8)));
 Test("Circle",()=>new Circle{Center=new XYZ(20,30,0),Radius=7});
 Test("Arc",()=>new Arc{Center=new XYZ(20,30,0),Radius=7,StartAngle=.2,EndAngle=2.5});
+Spline SymbolSpline(){
+ var spline=new Spline{Degree=2};spline.ControlPoints.AddRange([new XYZ(100,0,0),new XYZ(100,100,0),new XYZ(0,100,0)]);spline.Knots.AddRange([0,0,0,1,1,1]);spline.Weights.AddRange([1,Math.Sqrt(.5),1]);return spline;
+}
+Test("Rational spline",SymbolSpline);
+Test("Spline symbol block",()=>{var block=new BlockRecord("Curved electrical symbol");block.Entities.Add(SymbolSpline());return new Insert(block){InsertPoint=new XYZ(200,100,0),XScale=-2,YScale=1.5,Rotation=.4};});
+var splineDoc=new CadDocument();splineDoc.Header.InsUnits=ACadSharp.Types.Units.UnitsType.Millimeters;var quarter=SymbolSpline();splineDoc.Entities.Add(quarter);
+using(var parsed=JsonDocument.Parse(CadEngine.Import(Dxf(splineDoc),"dxf"))){var scene=parsed.RootElement;Assert(scene.GetProperty("coverage").GetProperty("Spline").GetInt32()==1,"Spline remains missing from display coverage.");var curve=scene.GetProperty("items")[0];Assert(curve.GetProperty("sourceType").GetString()=="Spline","Spline source identity missing.");var tokens=System.Text.RegularExpressions.Regex.Matches(curve.GetProperty("d").GetString()!,@"-?\d+(?:\.\d+)?").Select(m=>double.Parse(m.Value,System.Globalization.CultureInfo.InvariantCulture)).ToArray();bool midpoint=false;for(int i=0;i<tokens.Length;i+=2)if(Math.Abs(tokens[i]-Math.Sqrt(.5)*100)<.01&&Math.Abs(tokens[i+1]+Math.Sqrt(.5)*100)<.01)midpoint=true;Assert(midpoint,"Rational spline was replaced with its control polygon.");passed.Add("NURBS symbol preserves its rational curve rather than its control polygon");}
 var emptyRequest=new{factor=1,original="",originalFormat="dwg",segments=new[]{new{a=new[]{0,0},b=new[]{1000,0}}},labels=new[]{new{x=10,y=20,height=5,text="SparkWorld verification"}}};
 var added=CadEngine.Export(JsonSerializer.SerializeToUtf8Bytes(emptyRequest),"dwg");using(var scene=JsonDocument.Parse(CadEngine.Import(added,"dwg")))Assert(scene.RootElement.GetProperty("items").EnumerateArray().Any(i=>i.TryGetProperty("text",out var t)&&t.GetString()=="SparkWorld verification"),"Added annotations missing.");passed.Add("New vector annotations survive native DWG export");
 bool rejected=false;try{CadEngine.Import(Encoding.UTF8.GetBytes("not CAD"),"dwg");}catch{rejected=true;}Assert(rejected,"Corrupt input was accepted.");passed.Add("Corrupt DWG fails explicitly");
@@ -49,7 +56,7 @@ CadDocument LayerFixture(){
  var doc=new CadDocument();doc.Header.InsUnits=ACadSharp.Types.Units.UnitsType.Millimeters;
  var parent=new Layer("Block placement"){IsOn=false};var child=new Layer("Electrical symbols");var viewport=new Layer("New viewport only"){Flags=LayerFlags.FrozenNewViewports};var frozen=new Layer("Globally frozen"){Flags=LayerFlags.Frozen};var paper=new Layer("Paper geometry");var invisible=new Layer("Invisible source");
  foreach(var l in new[]{parent,child,viewport,frozen,paper,invisible,new Layer("Unused layer")})doc.Layers.Add(l);
- var block=new BlockRecord("Layer visibility fixture");block.Entities.Add(new Line{Layer=child,StartPoint=XYZ.Zero,EndPoint=new XYZ(500,300,0)});block.Entities.Add(new ACadSharp.Entities.Point{Layer=invisible,Location=new XYZ(100,100,0)});doc.Entities.Add(new Insert(block){Layer=parent,InsertPoint=new XYZ(2000,3000,0)});
+ var block=new BlockRecord("Layer visibility fixture");block.Entities.Add(new Line{Layer=child,StartPoint=XYZ.Zero,EndPoint=new XYZ(500,300,0)});var curve=SymbolSpline();curve.Layer=child;block.Entities.Add(curve);block.Entities.Add(new ACadSharp.Entities.Point{Layer=invisible,Location=new XYZ(100,100,0)});doc.Entities.Add(new Insert(block){Layer=parent,InsertPoint=new XYZ(2000,3000,0)});
  doc.Entities.Add(new Circle{Layer=viewport,Center=new XYZ(4000,3000,0),Radius=300});doc.Entities.Add(new Line{Layer=frozen,StartPoint=new XYZ(5000,3000,0),EndPoint=new XYZ(5500,3300,0)});
  doc.Entities.Add(new Line{Layer=invisible,IsInvisible=true,StartPoint=new XYZ(6000,3000,0),EndPoint=new XYZ(6500,3300,0)});doc.PaperSpace.Entities.Add(new Line{Layer=paper,StartPoint=XYZ.Zero,EndPoint=new XYZ(100,100,0)});
  return doc;
