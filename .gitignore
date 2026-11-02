@@ -8,6 +8,7 @@ node_modules/
 /build.py
 /Start-SparkWorld.ps1
 /jobs/
+/private-fixtures/
 /tests/acceptance.cjs
 /tests/dwg-regression.cjs
 /tests/canvas-interaction.cjs
