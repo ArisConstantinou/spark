@@ -14,7 +14,7 @@ using System.Windows.Media;
 namespace SparkWorld;
 public static class App {
  [STAThread]public static void Main(string[] args){
-  int outputArg=Array.IndexOf(args,"--qa-output");if(args.Contains("--qa")&&outputArg>=0&&outputArg+1<args.Length){string output=Path.GetFullPath(args[outputArg+1]);Directory.CreateDirectory(output);File.WriteAllText(Path.Combine(output,"desktop-qa.json"),"{\"status\":\"RUNNING\"}");File.WriteAllText(Path.Combine(output,"desktop-focus.json"),"{\"status\":\"RUNNING\"}");}
+  int outputArg=Array.IndexOf(args,"--qa-output");if(args.Contains("--qa")&&outputArg>=0&&outputArg+1<args.Length){string output=Path.GetFullPath(args[outputArg+1]),tag=args.Contains("--qa-studio")?"desktop-studio":"desktop";Directory.CreateDirectory(output);File.WriteAllText(Path.Combine(output,tag+"-qa.json"),"{\"status\":\"RUNNING\"}");File.WriteAllText(Path.Combine(output,tag+"-focus.json"),"{\"status\":\"RUNNING\"}");}
   var app=new Application();app.ShutdownMode=ShutdownMode.OnMainWindowClose;
   var window=new SparkWindow(args);app.MainWindow=window;app.Run(window);
  }
@@ -25,10 +25,13 @@ sealed class SparkWindow:Window {
  readonly SemaphoreSlim cadGate=new SemaphoreSlim(1,1);bool closing;
  readonly HashSet<string> sources=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
  int qaActivationEvents;
+ readonly List<string> qaDiagnostics=new List<string>();
  [DllImport("user32.dll")]static extern IntPtr GetForegroundWindow();
  [DllImport("user32.dll")]static extern bool ReleaseCapture();
  [DllImport("user32.dll")]static extern IntPtr SendMessage(IntPtr h,int message,IntPtr w,IntPtr l);
  [DllImport("user32.dll")]static extern short GetAsyncKeyState(int key);
+ [DllImport("user32.dll",EntryPoint="GetWindowLongPtrW")]static extern IntPtr GetWindowLongPtr(IntPtr h,int index);
+ [DllImport("user32.dll",EntryPoint="SetWindowLongPtrW")]static extern IntPtr SetWindowLongPtr(IntPtr h,int index,IntPtr value);
  internal SparkWindow(string[] args){
   qa=args.Contains("--qa");string Value(string flag,string fallback){int n=Array.IndexOf(args,flag);return n>=0&&n+1<args.Length?args[n+1]:fallback;}
   profile=Value("--profile",Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"SparkWorld","UserData"));
@@ -36,7 +39,7 @@ sealed class SparkWindow:Window {
   Title="SparkWorld · Created by Aris";Width=1440;Height=940;MinWidth=720;MinHeight=520;
   WindowStyle=WindowStyle.None;ResizeMode=ResizeMode.CanResize;Background=new SolidColorBrush(Color.FromRgb(13,21,29));
   System.Windows.Shell.WindowChrome.SetWindowChrome(this,new System.Windows.Shell.WindowChrome{CaptionHeight=0,ResizeBorderThickness=new Thickness(6),GlassFrameThickness=new Thickness(0),CornerRadius=new CornerRadius(0)});
-  if(qa){ShowActivated=false;ShowInTaskbar=false;Left=-32000;Top=-32000;Activated+=(_,__)=>qaActivationEvents++;}else WindowStartupLocation=WindowStartupLocation.CenterScreen;
+  if(qa){ShowActivated=false;ShowInTaskbar=false;Left=-32000;Top=-32000;Activated+=(_,__)=>qaActivationEvents++;SourceInitialized+=(_,__)=>{var hwnd=new WindowInteropHelper(this).Handle;SetWindowLongPtr(hwnd,-20,new IntPtr(GetWindowLongPtr(hwnd,-20).ToInt64()|0x08000000L));};}else WindowStartupLocation=WindowStartupLocation.CenterScreen;
   view.DefaultBackgroundColor=System.Drawing.Color.FromArgb(255,13,21,29);Content=view;
   Loaded+=async(_,__)=>await Initialize(args);
   Closing+=(s,e)=>{if(closing)return;e.Cancel=true;if(view.CoreWebView2!=null)view.CoreWebView2.PostWebMessageAsJson("{\"event\":\"close-request\"}");};
@@ -46,10 +49,11 @@ sealed class SparkWindow:Window {
   Directory.CreateDirectory(profile);var options=new CoreWebView2EnvironmentOptions();if(qa)options.AdditionalBrowserArguments="--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows";var env=await CoreWebView2Environment.CreateAsync(null,profile,options);await view.EnsureCoreWebView2Async(env);
   var core=view.CoreWebView2;core.Settings.AreDefaultContextMenusEnabled=false;core.Settings.AreDefaultScriptDialogsEnabled=false;core.Settings.IsStatusBarEnabled=false;core.Settings.AreDevToolsEnabled=qa;
   core.SetVirtualHostNameToFolderMapping("sparkworld.local",webRoot,CoreWebView2HostResourceAccessKind.DenyCors);
+  if(qa){var exceptions=core.GetDevToolsProtocolEventReceiver("Runtime.exceptionThrown");exceptions.DevToolsProtocolEventReceived+=(_,e)=>{if(qaDiagnostics.Count<50)qaDiagnostics.Add(e.ParameterObjectAsJson.Substring(0,Math.Min(e.ParameterObjectAsJson.Length,6000)));};await core.CallDevToolsProtocolMethodAsync("Runtime.enable","{}");core.WebResourceResponseReceived+=(_,e)=>{if(e.Response.StatusCode>=400&&qaDiagnostics.Count<50)qaDiagnostics.Add(e.Response.StatusCode+" "+e.Request.Uri);};}
   core.NavigationStarting+=(_,e)=>{if(!Uri.TryCreate(e.Uri,UriKind.Absolute,out var u)||u.Scheme!="https"||u.Host!="sparkworld.local")e.Cancel=true;};
   core.NewWindowRequested+=(_,e)=>e.Handled=true;core.PermissionRequested+=(_,e)=>e.State=CoreWebView2PermissionState.Deny;
   core.WebMessageReceived+=async(_,e)=>{if(!e.Source.StartsWith("https://sparkworld.local/",StringComparison.Ordinal))return;await Receive(e.WebMessageAsJson);};
-  core.Navigate("https://sparkworld.local/index.html");
+  core.Navigate("https://sparkworld.local/"+(qa&&args.Contains("--qa-studio")?"cad-studio.html":"index.html"));
   if(qa)await RunQa(args);
  }catch(Exception e){ShowFailure(e.Message);}}
  void ShowFailure(string message){
@@ -60,7 +64,7 @@ sealed class SparkWindow:Window {
  async Task Receive(string json){string id="";try{
   using var parsed=JsonDocument.Parse(json);var root=parsed.RootElement;id=root.GetProperty("id").GetString()??"";string method=root.GetProperty("method").GetString()??"";var a=root.GetProperty("args");object? result;
   switch(method){
-   case "app.info":result=new{name="SparkWorld",creator="Aris",version="0.2.1",cad=true,mode="desktop",decoder="ACadSharp 3.6.51 · native Windows"};break;
+   case "app.info":result=new{name="SparkWorld",creator="Aris",version=typeof(App).Assembly.GetName().Version?.ToString(3),cad=true,mode="desktop",decoder="ACadSharp 3.6.51 · native Windows"};break;
    case "qa.pointer":if(!qa)throw new InvalidOperationException("QA is disabled.");await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",a.GetRawText());result=true;break;
    case "window.minimize":WindowState=WindowState.Minimized;result=true;break;
    case "window.maximize":WindowState=WindowState==WindowState.Maximized?WindowState.Normal:WindowState.Maximized;result=true;break;
@@ -106,23 +110,25 @@ sealed class SparkWindow:Window {
  }
  async Task RunQa(string[] args){
   int arg=Array.IndexOf(args,"--qa-output");if(arg<0||arg+1>=args.Length)throw new ArgumentException("QA requires --qa-output.");string output=Path.GetFullPath(args[arg+1]);Directory.CreateDirectory(output);
+  bool studio=args.Contains("--qa-studio");string tag=studio?"desktop-studio":"desktop",ready=studio?"!!window.sparkCadStudio":"!!window.fyp";
   var foreground=GetForegroundWindow();var watch=Stopwatch.StartNew();
   try{
-   while(await view.CoreWebView2.ExecuteScriptAsync("!!window.fyp")!="true"){if(watch.Elapsed.TotalSeconds>45)throw new TimeoutException("Desktop interface did not initialize.");await Task.Delay(100);}
+   while(await view.CoreWebView2.ExecuteScriptAsync(ready)!="true"){if(watch.Elapsed.TotalSeconds>(studio?120:45))throw new TimeoutException("Desktop interface did not initialize.");await Task.Delay(100);}
    int fileArg=Array.IndexOf(args,"--dwg");string source=fileArg>=0&&fileArg+1<args.Length?args[fileArg+1]:"";
-   await view.CoreWebView2.ExecuteScriptAsync("window.__qaSource="+JsonSerializer.Serialize(source)+";window.__qaOutput="+JsonSerializer.Serialize(output));
-   string script=File.ReadAllText(Path.Combine(webRoot,"desktop-qa.js"));await view.CoreWebView2.ExecuteScriptAsync(script);
+   int expectedArg=Array.IndexOf(args,"--expected-layers");int expectedLayers=expectedArg>=0&&expectedArg+1<args.Length?int.Parse(args[expectedArg+1]):60;
+   await view.CoreWebView2.ExecuteScriptAsync("window.__qaSource="+JsonSerializer.Serialize(source)+";window.__qaOutput="+JsonSerializer.Serialize(output)+";window.__qaExpectedLayers="+expectedLayers);
+   string script=File.ReadAllText(Path.Combine(webRoot,studio?"desktop-studio-qa.js":"desktop-qa.js"));await view.CoreWebView2.ExecuteScriptAsync(script);
    string result;do{await Task.Delay(250);result=await view.CoreWebView2.ExecuteScriptAsync("window.__sparkQa?JSON.stringify(window.__sparkQa):null");if(watch.Elapsed.TotalSeconds>240)throw new TimeoutException("Desktop QA timed out.");}while(result=="null");
    string report=JsonSerializer.Deserialize<string>(result)!;using var parsed=JsonDocument.Parse(report);
-   File.WriteAllText(Path.Combine(output,"desktop-qa.json"),report);using(var image=File.Create(Path.Combine(output,"desktop-qa.png")))await view.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,image);
+   File.WriteAllText(Path.Combine(output,tag+"-qa.json"),report);using(var image=File.Create(Path.Combine(output,tag+"-qa.png")))await view.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,image);
    // Retain the old global sentinel, but also monitor this QA window for its
    // entire lifetime, including startup. A user changing unrelated windows is
    // different from our application activating; activation followed by restoring
    // the old foreground must fail even when the old before/after sentinel passes.
    bool unchanged=foreground==GetForegroundWindow(),applicationNeverActivated=qaActivationEvents==0&&GetForegroundWindow()!=new System.Windows.Interop.WindowInteropHelper(this).Handle;
-   File.WriteAllText(Path.Combine(output,"desktop-focus.json"),JsonSerializer.Serialize(new{unchanged,applicationNeverActivated,activationEvents=qaActivationEvents,elapsedSeconds=watch.Elapsed.TotalSeconds}));
+   File.WriteAllText(Path.Combine(output,tag+"-focus.json"),JsonSerializer.Serialize(new{unchanged,applicationNeverActivated,activationEvents=qaActivationEvents,elapsedSeconds=watch.Elapsed.TotalSeconds}));
    Environment.ExitCode=parsed.RootElement.GetProperty("status").GetString()=="PASS"&&applicationNeverActivated?0:1;
-  }catch(Exception e){File.WriteAllText(Path.Combine(output,"desktop-qa.json"),JsonSerializer.Serialize(new{status="FAIL",error=e.ToString()}));Environment.ExitCode=1;}
+  }catch(Exception e){string diagnostic=await view.CoreWebView2.ExecuteScriptAsync("JSON.stringify({url:location.href,title:document.title,status:document.querySelector('#engine-status')?.textContent,loading:document.querySelector('#studio-loading')?.textContent,frame:[...document.querySelectorAll('iframe')].map(f=>({url:f.src,text:f.contentDocument?.body?.innerText?.slice(0,3000)}))})");File.WriteAllText(Path.Combine(output,tag+"-qa.json"),JsonSerializer.Serialize(new{status="FAIL",error=e.ToString(),diagnostic,exceptions=qaDiagnostics}));using(var image=File.Create(Path.Combine(output,tag+"-qa.png")))await view.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,image);File.WriteAllText(Path.Combine(output,tag+"-focus.json"),JsonSerializer.Serialize(new{applicationNeverActivated=qaActivationEvents==0,activationEvents=qaActivationEvents}));Environment.ExitCode=1;}
   finally{closing=true;Close();}
  }
 }

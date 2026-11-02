@@ -99,6 +99,7 @@ jobs:
           retention-days: 3
   desktop:
     if: github.event_name == 'workflow_dispatch' && inputs.build_windows
+    needs: [browser-engine]
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -112,14 +113,39 @@ jobs:
       - name: Build Windows application
         shell: pwsh
         run: dotnet build desktop/SparkWorld.Desktop.csproj -c Release -o .out/windows -p:SparkIcon="$pwd/.out/SparkWorld.ico"
-      - name: Include the matching interface
-        shell: pwsh
-        run: Copy-Item -LiteralPath web -Destination .out/windows/web -Recurse
+      - name: Include the exact verified web interface and physical CAD component
+        uses: actions/download-artifact@v4
+        with:
+          name: verified-web-site
+          path: .out/windows/web
+      - uses: actions/download-artifact@v4
+        with:
+          name: cad-fixtures
+          path: .out/fixtures
       - name: Include component notices
         shell: pwsh
         run: |
           Copy-Item -LiteralPath THIRD_PARTY_NOTICES.md -Destination .out/windows/THIRD_PARTY_NOTICES.md
+          Copy-Item -LiteralPath LICENSE -Destination .out/windows/LICENSE
           Copy-Item -LiteralPath licenses -Destination .out/windows/licenses -Recurse
+      - name: Verify packaged Windows CAD offscreen
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $taskOutput=Join-Path $pwd '.out/test-results/native'
+          New-Item -ItemType Directory -Path $taskOutput -Force | Out-Null
+          $taskExe=Join-Path $pwd '.out/windows/SparkWorld.exe'
+          $taskProfile=Join-Path $pwd '.out/work/desktop-profile'
+          $taskFixture=Join-Path $pwd '.out/fixtures/layer-fixture.dwg'
+          $taskQaArgs=@('--qa','--qa-studio','--profile',('"'+$taskProfile+'"'),'--qa-output',('"'+$taskOutput+'"'),'--dwg',('"'+$taskFixture+'"'),'--expected-layers','8')
+          $taskProcess=Start-Process -FilePath $taskExe -ArgumentList $taskQaArgs -WindowStyle Hidden -PassThru -Wait
+          if($taskProcess.ExitCode -ne 0){throw "Packaged Windows CAD QA failed: $($taskProcess.ExitCode)"}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-verification
+          path: .out/test-results/native
+          retention-days: 3
       - uses: actions/upload-artifact@v4
         with:
           name: windows-app
