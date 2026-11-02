@@ -12,6 +12,8 @@ node_modules/
 /tests/dwg-regression.cjs
 /tests/canvas-interaction.cjs
 /tests/cad-fill.cjs
+/tests/import-picker.cjs
+/tests/mobile-controls.cjs
 bin/
 obj/
 .out/

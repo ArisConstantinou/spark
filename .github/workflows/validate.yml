@@ -11,8 +11,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Test source offset persistence and units
-        run: node --test tests/model.test.mjs
+      - name: Test source offsets, units and touch gesture safety
+        run: node --test tests/model.test.mjs tests/touch-navigation.test.mjs
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
