@@ -48,6 +48,7 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  const downloading=page.waitForEvent('download');await page.locator('#studio-info').click();await page.locator('#dialog-actions button').filter({hasText:'Export DWG copy'}).click();const download=await downloading;await download.saveAs(path.join(out,'cad-workspace-roundtrip.dwg'));const dwg=await fs.readFile(path.join(out,'cad-workspace-roundtrip.dwg'));check(dwg.subarray(0,6).toString()==='AC1032','Main workspace exports a genuine DWG 2018 copy');
  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(700);await page.locator('#fit').click();await page.screenshot({path:path.join(out,'cad-workspace-mobile.png')});
  const bounds=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,nav:[...document.querySelectorAll('.studio-rail button')].map(b=>b.getBoundingClientRect().toJSON())}));check(!bounds.overflow&&bounds.nav.every(b=>b.height>=44&&b.x>=0&&b.right<=390),'Mobile has five usable bottom actions without page overflow');
+ await require('./cad-own-controls.cjs')({page,cad,check,out});
  check(report.errors.length===0,'No unhandled browser errors');check(report.external.length===0,'No external requests or drawing uploads');report.status='PASS';
  }finally{await context?.close();}
 };

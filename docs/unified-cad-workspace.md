@@ -8,6 +8,20 @@ complete ready-made editor and adds the SparkWorld project browser, electrical
 palette, circuit metadata, native layers, compact selection and explicit Details.
 The full native CAD tools remain available in that same page.
 
+The next candidate adds SparkWorld-owned Draw/Modify/Annotate/View controls,
+native command prompts and input, and an explicit Details property editor.
+These controls call the existing editor's command and property API; the local
+acceptance test creates a line, changes its native coordinates, undoes/redoes
+the change and verifies DWG export/reopen. This is functional integration, but
+the component's remaining document tabs, status bar and floating command UI are
+still visible. A viewport-only renderer host has not been built or accepted.
+Do not describe the visual integration or mobile input as complete.
+
+Legacy-copy migration preserves corrected drawing units, sparse block movement,
+source bytes, circuits, point notes, routes and measurements. Its saved hidden
+layer view is applied to the working copy; Source state restores original DWG
+flags independently. The earlier project database remains unchanged.
+
 The candidate saves native DWG geometry and electrical metadata together in a
 `sparkworld/cad-v2` project. Original file bytes are retained separately from the
 working snapshot. Complete project JSON includes circuits and point notes; the
