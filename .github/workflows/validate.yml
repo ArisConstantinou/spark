@@ -29,7 +29,7 @@ jobs:
         id: browser-cache
         with:
           path: .out/browser
-          key: browser-${{ runner.os }}-${{ steps.dotnet.outputs.dotnet-version }}-${{ hashFiles('cad/**', 'cad-browser/**') }}
+          key: browser-${{ runner.os }}-${{ steps.dotnet.outputs.dotnet-version }}-${{ hashFiles('cad/*.cs', 'cad/*.csproj', 'cad-browser/*.cs', 'cad-browser/*.csproj') }}
       - name: Install browser build tools
         if: steps.browser-cache.outputs.cache-hit != 'true'
         run: dotnet workload install wasm-tools --skip-manifest-update
@@ -51,7 +51,7 @@ jobs:
         if: steps.browser-cache.outputs.cache-hit != 'true'
         with:
           path: .out/browser
-          key: browser-${{ runner.os }}-${{ steps.dotnet.outputs.dotnet-version }}-${{ hashFiles('cad/**', 'cad-browser/**') }}
+          key: browser-${{ runner.os }}-${{ steps.dotnet.outputs.dotnet-version }}-${{ hashFiles('cad/*.cs', 'cad/*.csproj', 'cad-browser/*.cs', 'cad-browser/*.csproj') }}
       - name: Report output sizes
         run: du -sh .out/browser && find .out/browser -maxdepth 3 -type f | head -40
       - name: Prepare the pinned ready-made CAD editor
