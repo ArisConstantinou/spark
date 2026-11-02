@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -40,6 +41,9 @@ upstream = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, tex
 files = {p.relative_to(output).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
          for p in sorted(output.rglob("*")) if p.is_file() and p.name != ".component-manifest.json"}
 manifest = {"upstream_commit": upstream, "presentation": "sparkworld-viewport-host",
+            "integration_commit": os.environ.get("GITHUB_SHA"),
+            "tools": {name: subprocess.check_output([name, "--version"], text=True).strip()
+                      for name in ("rustc", "trunk", "wasm-bindgen")},
             "patch_sha256": hashlib.sha256(patch).hexdigest(), "files": files}
 (output / ".component-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 print(json.dumps({"upstream": upstream, "files": len(files), "payload_bytes": sum(p.stat().st_size for p in output.rglob('*') if p.is_file())}))
