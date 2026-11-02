@@ -59,8 +59,11 @@ Cropping the old UI or assuming fixed 32px/30px insets is not acceptance.
 The source available at upstream commit
 `0e77cae652271d08c7619238e619f9b6668ae17c` renders the combined UI in
 `src/app/view/mod.rs::view_main`; its workspace, floating command line and outer
-chrome are distinct construction sections. A modified source build is not yet
-compiled or verified. Retain the distributed component and pinned provenance
+chrome are distinct construction sections. `tools/prepare-cad-host.py` validates
+that commit, both original source hashes and every replacement anchor before
+editing either source file. The experimental web-only workflow compiles this
+optional presentation mode and checks the shared UI at pixel density 2.
+A modified source build is not yet verified. Retain the distributed component and pinned provenance
 until a replacement passes the same DWG and interaction checks.
 
 ## Gates for a replacement

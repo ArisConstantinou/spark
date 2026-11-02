@@ -101,7 +101,7 @@ async function migrateLegacy(id){const old=await legacyStorage.get(id);if(!old)t
  project.dirty=true;await saveCurrent();closePanel();toast('Imported a copy. The earlier saved drawing is unchanged.');
 });}
 function more(){dialog('Drawing actions','<p class="dialog-copy">CAD geometry and electrical data belong to this workspace.</p>',[
- {label:'Show / hide full CAD tools',run:async()=>{closePanel();await api().toggleCanvas();}},
+ ...(!api().state?.hosted_view?[{label:'Show / hide full CAD tools',run:async()=>{closePanel();await api().toggleCanvas();}}]:[]),
  {label:'Fit drawing',run:()=>task('Fitting drawing…',()=>mutate({op:'action',name:'zoom_extents'}))},
  {label:'Drawing layers',run:()=>openPanel('Layers')},
  {label:'Undo CAD edit',run:()=>task('Undoing edit…',()=>mutate({op:'undo'}))},
@@ -112,7 +112,7 @@ function more(){dialog('Drawing actions','<p class="dialog-copy">CAD geometry an
  {label:'Export complete project JSON',run:()=>task('Exporting complete project…',async()=>{await saveCurrent();await download(JSON.stringify(project),filename('json'),'application/json');})},
  {label:'Source and licenses',run:()=>{window.open(new URL('cad-sources.html',document.baseURI),'_blank','noopener');}},
  ]);}
-async function poll(force=false){if((busy&&!force)||!api()||api().busy)return;const epoch=++pollSerial,state=await read({op:'state'});if(epoch!==pollSerial)return;nativeControls?.update(state);bindDocument(state);if(!project){$('#point-summary').hidden=true;return;}$('#studio-document').textContent=project.name;
+async function poll(force=false){if((busy&&!force)||!api()||api().busy)return;const epoch=++pollSerial,state=await read({op:'state'});if(epoch!==pollSerial)return;nativeControls?.update(state);document.body.classList.toggle('cad-viewport-hosted',!!state.hosted_view);bindDocument(state);if(!project){$('#point-summary').hidden=true;return;}$('#studio-document').textContent=project.name;
  const key=state.document_id+'|'+state.selection_revision+'|'+state.selection.join(',');if(key!==lastSelection){const picked=state.selection[0]?(await read({op:'query',handles:[state.selection[0]],detail:'geometry'})).entities[0]:null;if(epoch!==pollSerial)return;lastSelection=key;selection=picked;$('#point-summary').hidden=!selection;if(selection)$('#point-summary-label').textContent=project.points[selection.handle]?.label||selection.display_type||selection.type;}
  const revisionKey=state.document_id+':'+state.revision;
  if(lastRevision!==revisionKey){lastRevision=revisionKey;project.dirty=project.savedRevision!==state.revision;clearTimeout(saveTimer);saveTimer=null;}

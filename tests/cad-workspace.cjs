@@ -10,9 +10,9 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
   await page.getByRole('button',{name:'Continue with software rendering',exact:true}).click();
  }throw Error('The complete CAD project did not become ready.');}
  try{
- context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block',acceptDownloads:true});
+ context=await browser.newContext({viewport:{width:1440,height:1000},deviceScaleFactor:Number(process.env.SPARK_TEST_DPR||1),serviceWorkers:'block',acceptDownloads:true});
  await context.route('**/*',r=>{const u=new URL(r.request().url());if(['http:','https:'].includes(u.protocol)&&u.origin!=='http://127.0.0.1:5173'){report.external.push(u.origin);return r.abort();}return r.continue();});
- page=await context.newPage();page.on('pageerror',e=>report.errors.push(e.message));await page.goto(baseUrl+'?workspace=cad');await page.waitForFunction(()=>window.sparkWorkspace,{},{timeout:120000});
+ page=await context.newPage();page.on('pageerror',e=>report.errors.push(e.message));await page.goto(baseUrl+'?workspace=cad'+(process.env.SPARK_HOSTED_RENDERER==='1'?'&renderer=host':''));await page.waitForFunction(()=>window.sparkWorkspace,{},{timeout:120000});
  const cad=(request,write=false)=>page.evaluate(({request,write})=>write?sparkWorkspace.mutate(request):sparkWorkspace.read(request),{request,write});
  await page.locator('#file-input').setInputFiles(fixture);
  await ready();
@@ -43,8 +43,12 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  await page.reload();await ready();
  check((await page.evaluate(()=>Object.values(sparkWorkspace.project.points)[0].note)).includes('Κουζίνα'),'Reload restores CAD geometry and electrical notes from one project');
  const reopened=(await cad({op:'query',handles:[point.handle],detail:'geometry'})).entities[0];check(reopened.position[0]===entity.position[0]+25&&reopened.position[1]===entity.position[1]+40,'Native movement survives complete-project save and reload');
+ if(process.env.SPARK_HOSTED_RENDERER==='1'){
+ const state=await cad({op:'state'}),bounds=await page.locator('#cad-frame').boundingBox();check(state.hosted_view===true,'The compiled engine exposes the real viewport host mode');check(Math.abs(state.viewport_size[0]-bounds.width)<2&&Math.abs(state.viewport_size[1]-bounds.height)<2,'Native viewport fills the iframe without foreign chrome or cropping');await page.screenshot({path:path.join(out,'cad-workspace-full-tools.png')});
+ }else{
  await page.locator('#studio-info').click();await page.locator('#dialog-actions button').filter({hasText:'Show / hide full CAD tools'}).click();await page.waitForFunction(()=>!sparkCadStudio.compact&&!sparkCadStudio.busy);await page.screenshot({path:path.join(out,'cad-workspace-full-tools.png')});
  check(!await page.evaluate(()=>sparkCadStudio.compact),'Full native CAD tools remain accessible on the same main page');
+ }
  const downloading=page.waitForEvent('download');await page.locator('#studio-info').click();await page.locator('#dialog-actions button').filter({hasText:'Export DWG copy'}).click();const download=await downloading;await download.saveAs(path.join(out,'cad-workspace-roundtrip.dwg'));const dwg=await fs.readFile(path.join(out,'cad-workspace-roundtrip.dwg'));check(dwg.subarray(0,6).toString()==='AC1032','Main workspace exports a genuine DWG 2018 copy');
  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(700);await page.locator('#fit').click();await page.screenshot({path:path.join(out,'cad-workspace-mobile.png')});
  const bounds=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,nav:[...document.querySelectorAll('.studio-rail button')].map(b=>b.getBoundingClientRect().toJSON())}));check(!bounds.overflow&&bounds.nav.every(b=>b.height>=44&&b.x>=0&&b.right<=390),'Mobile has five usable bottom actions without page overflow');

@@ -1,0 +1,101 @@
+name: Build and verify SparkWorld CAD viewport host
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/cad-viewport-host]
+    paths:
+      - '.github/workflows/cad-host.yml'
+      - 'tools/prepare-cad-host.py'
+      - 'tools/finalize-cad-host.py'
+      - 'web/**'
+      - 'tests/cad-*.cjs'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: sparkworld-cad-host
+  cancel-in-progress: false
+jobs:
+  web-host:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/.out/cad-target
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.out/qa-browsers
+      SPARK_HOSTED_RENDERER: '1'
+      SPARK_TEST_DPR: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout the reviewed CAD source
+        uses: actions/checkout@v4
+        with:
+          repository: HakanSeven12/OpenCADStudio
+          ref: 0e77cae652271d08c7619238e619f9b6668ae17c
+          path: .out/cad-source
+          persist-credentials: false
+      - name: Apply the bounded viewport presentation change
+        run: python3 tools/prepare-cad-host.py .out/cad-source
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .out/cad-source -> ../cad-target
+          key: sparkworld-cad-host-0e77cae
+      - name: Install the pinned web builder
+        uses: taiki-e/install-action@v2
+        with:
+          tool: trunk@0.22.1
+      - name: Read the locked wasm-bindgen version
+        id: bindgen
+        run: |
+          version=$(sed -n '/name = "wasm-bindgen"/{n;s/version = "\(.*\)"/\1/p;q;}' .out/cad-source/Cargo.lock)
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@${{ steps.bindgen.outputs.version }}
+      - name: Record build tools and available space
+        run: |
+          rustc --version
+          trunk --version
+          wasm-bindgen --version
+          df -h .
+      - name: Compile only the web component
+        working-directory: .out/cad-source
+        run: trunk build --locked --release --public-url ./ --dist "$GITHUB_WORKSPACE/.out/site/app" --html-output index.html web-app.html
+      - name: Prepare the owned web host
+        run: |
+          python3 tools/finalize-cad-host.py .out/cad-source .out/site/app
+          cp -a web/. .out/site/
+          cp THIRD_PARTY_NOTICES.md LICENSE .out/site/
+          cp -a licenses .out/site/
+          du -sh .out/cad-target .out/site/app
+      - name: Reuse the verified public CAD fixtures
+        uses: actions/download-artifact@v4
+        with:
+          name: cad-fixtures
+          path: .out
+          run-id: 41513509529
+          github-token: ${{ github.token }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install the existing pinned browser verifier
+        run: |
+          npm install --prefix .out/qa --no-audit --no-fund playwright@1.62.1
+          .out/qa/node_modules/.bin/playwright install --with-deps chromium
+      - name: Verify the actual viewport host and custom tools
+        run: node tests/cad-host-release.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cad-host-verification
+          path: .out/test-results
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-cad-host
+          path: .out/site
+          include-hidden-files: true
+          retention-days: 3
