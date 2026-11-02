@@ -17,6 +17,7 @@ node_modules/
 bin/
 obj/
 .out/
+/web/app/
 *.dwg
 *.dxf
 *.log

@@ -20,16 +20,18 @@ partial class Scene(CadDocument document,List<string> notices) {
     double factor=1;
     int count=0;
     static object? Get(object? o,string key)=>o is IDictionary<string,object?> map?(map.TryGetValue(key,out var value)?value:null):o?.GetType().GetProperty(key)?.GetValue(o);
+    // Dictionary.GetValueOrDefault is unavailable in the Windows net48 host.
+    static T ValueOrDefault<K,T>(Dictionary<K,T> values,K key) where K:notnull=>values.TryGetValue(key,out var value)?value:default!;
     static double Num(object? o,string key,double fallback=0)=>Get(o,key) is IConvertible v? v.ToDouble(CultureInfo.InvariantCulture):fallback;
     static (double x,double y) Point(object? o)=>(Num(o,"X"),Num(o,"Y"));
     static IEnumerable<object> Many(object? o)=>o is IEnumerable list?list.Cast<object>():[];
     static string F(double n)=>n.ToString("0.#####",CultureInfo.InvariantCulture);
     static double[] Mul(double[] a,double[] b)=>[a[0]*b[0]+a[2]*b[1],a[1]*b[0]+a[3]*b[1],a[0]*b[2]+a[2]*b[3],a[1]*b[2]+a[3]*b[3],a[0]*b[4]+a[2]*b[5]+a[4],a[1]*b[4]+a[3]*b[5]+a[5]];
     void Missing(string layer,string type,string[]? dependencies=null){
-        unsupported[type]=unsupported.GetValueOrDefault(type)+1;
+        unsupported[type]=ValueOrDefault(unsupported,type)+1;
         foreach(var name in (dependencies??[layer]).Distinct()){
             if(!unsupportedByLayer.TryGetValue(name,out var types))unsupportedByLayer[name]=types=[];
-            types[type]=types.GetValueOrDefault(type)+1;
+            types[type]=ValueOrDefault(types,type)+1;
         }
     }
     void RegisterLayers(){
@@ -38,7 +40,7 @@ partial class Scene(CadDocument document,List<string> notices) {
         var definitions=document.BlockRecords.Where(b=>b!=document.ModelSpace&&!(b.Layout?.IsPaperSpace??false)).SelectMany(b=>b.Entities).GroupBy(e=>e.Layer?.Name??"0").ToDictionary(g=>g.Key,g=>g.Count());
         foreach(var layer in document.Layers){
             bool frozen=(layer.Flags&LayerFlags.Frozen)!=0;
-            layers[layer.Name]=new{name=layer.Name,visible=layer.IsOn&&!frozen,sourceOn=layer.IsOn,sourceFrozen=frozen,newViewportFrozen=(layer.Flags&LayerFlags.FrozenNewViewports)!=0,locked=(layer.Flags&LayerFlags.Locked)!=0,modelObjects=model.GetValueOrDefault(layer.Name),paperObjects=paper.GetValueOrDefault(layer.Name),definitionObjects=definitions.GetValueOrDefault(layer.Name)};
+            layers[layer.Name]=new{name=layer.Name,visible=layer.IsOn&&!frozen,sourceOn=layer.IsOn,sourceFrozen=frozen,newViewportFrozen=(layer.Flags&LayerFlags.FrozenNewViewports)!=0,locked=(layer.Flags&LayerFlags.Locked)!=0,modelObjects=ValueOrDefault(model,layer.Name),paperObjects=ValueOrDefault(paper,layer.Name),definitionObjects=ValueOrDefault(definitions,layer.Name)};
         }
     }
     double[] At((double x,double y) p,double[] m)=>[(p.x*m[0]+p.y*m[2]+m[4])*factor,-(p.x*m[1]+p.y*m[3]+m[5])*factor];
@@ -47,7 +49,7 @@ partial class Scene(CadDocument document,List<string> notices) {
         if(ps.Length<2)return;
         all.AddRange(ps);
         var d="M"+string.Join(" L",ps.Select(p=>F(p[0])+","+F(p[1])))+(close?" Z":"");
-        items.Add(new {id="g"+count++,owner,layer,visibilityLayers=visibility.GetValueOrDefault(e)??[layer],kind="path",d,bounds=new[]{ps.Min(p=>p[0]),ps.Min(p=>p[1]),ps.Max(p=>p[0]),ps.Max(p=>p[1])}});
+        items.Add(new {id="g"+count++,owner,layer,visibilityLayers=ValueOrDefault(visibility,e)??[layer],kind="path",d,bounds=new[]{ps.Min(p=>p[0]),ps.Min(p=>p[1]),ps.Max(p=>p[0]),ps.Max(p=>p[1])}});
     }
     static IEnumerable<(double x,double y)> Curve(double cx,double cy,double rx,double ry,double a,double b,double rotation=0) {
         int n=Math.Max(8,Math.Min(120,(int)Math.Ceiling(Math.Abs(b-a)*18)));
@@ -59,14 +61,14 @@ partial class Scene(CadDocument document,List<string> notices) {
             if(items.Count>120000)throw new Exception("Drawing exceeds 120,000 display entities. Import a floor-specific DWG.");
             string layer=e.Layer?.Name??"0";
             if(layer=="0"&&parent!=null)layer=parent;
-            if(e.IsInvisible){foreach(var name in (ancestors??[]).Concat(new[]{layer}).Distinct())invisibleByLayer[name]=invisibleByLayer.GetValueOrDefault(name)+1;continue;}
+            if(e.IsInvisible){foreach(var name in (ancestors??[]).Concat(new[]{layer}).Distinct())invisibleByLayer[name]=ValueOrDefault(invisibleByLayer,name)+1;continue;}
             var cadLayer=document.Layers.Contains(layer)?document.Layers[layer]:e.Layer;
             if(!layers.ContainsKey(layer))layers[layer]=new{name=layer,visible=(cadLayer?.IsOn??true)&&((cadLayer?.Flags??LayerFlags.None)&LayerFlags.Frozen)==0};
             visibility[e]=(ancestors??[]).Concat(new[]{layer}).Distinct().ToArray();
             string id=owner??e.Handle.ToString();
             var type=e.GetType().Name;
             try {
-                if(TryAdvanced(e,m,id,layer,depth,visibility[e])) {coverage[type]=coverage.GetValueOrDefault(type)+1;}
+                if(TryAdvanced(e,m,id,layer,depth,visibility[e])) {coverage[type]=ValueOrDefault(coverage,type)+1;}
                 else if(e is Insert ins) {
                     var basePoint=ins.Block.BlockEntity.BasePoint;
                     double c=Math.Cos(ins.Rotation),s=Math.Sin(ins.Rotation),sx=ins.XScale,sy=ins.YScale;
@@ -98,7 +100,7 @@ partial class Scene(CadDocument document,List<string> notices) {
         var t=Regex.Replace(value??"",@"\\P|\\p","\n");t=Regex.Replace(t,@"\\[A-Za-z][^;]*;","");t=t.Replace("{","").Replace("}","");
         if(string.IsNullOrWhiteSpace(t))return;
         var p=At((x,y),m);double height=Math.Max(1,h*factor*Math.Sqrt(m[0]*m[0]+m[1]*m[1]));
-        all.Add(p);items.Add(new{id="g"+count++,owner,layer,visibilityLayers=visibility.GetValueOrDefault(e)??[layer],kind="text",text=t,x=p[0],y=p[1],height,rotation=-(r+Math.Atan2(m[1],m[0]))*180/Math.PI,bounds=new[]{p[0],p[1]-height,p[0]+height*t.Length*.6,p[1]}});
+        all.Add(p);items.Add(new{id="g"+count++,owner,layer,visibilityLayers=ValueOrDefault(visibility,e)??[layer],kind="text",text=t,x=p[0],y=p[1],height,rotation=-(r+Math.Atan2(m[1],m[0]))*180/Math.PI,bounds=new[]{p[0],p[1]-height,p[0]+height*t.Length*.6,p[1]}});
     }
     public object Convert(){
         int units=(int)document.Header.InsUnits;

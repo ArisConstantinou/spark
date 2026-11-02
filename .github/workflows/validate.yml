@@ -1,6 +1,11 @@
 name: Validate and package SparkWorld
 on:
   workflow_dispatch:
+    inputs:
+      build_windows:
+        description: Build the optional Windows package
+        type: boolean
+        default: false
   push:
     branches: [codex/spark-release, main]
 permissions:
@@ -11,6 +16,9 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Test document state, layer dependencies and touch gestures
         run: node --test tests/*.test.mjs
       - uses: actions/setup-dotnet@v5
@@ -33,12 +41,47 @@ jobs:
         run: dotnet publish cad-browser/SparkWorld.CadBrowser.csproj -c Release -o .out/browser
       - name: Report output sizes
         run: du -sh .out/browser && find .out/browser -maxdepth 3 -type f | head -40
+      - name: Prepare the pinned ready-made CAD editor
+        run: python tools/prepare-cad-editor.py --output .out/site/app
+      - name: Assemble the web release
+        run: |
+          mkdir -p .out/site/engine
+          cp -a web/. .out/site/
+          cp -a .out/browser/wwwroot/. .out/site/engine/
+          find .out/site/engine -type f \( -name '*.br' -o -name '*.gz' -o -name '*.pdb' \) -delete
+          cp THIRD_PARTY_NOTICES.md LICENSE .out/site/
+          cp -a licenses .out/site/
+          touch .out/site/.nojekyll
+          python -c 'import json,os; open(".out/site/version.json","w").write(json.dumps({"commit":os.environ["GITHUB_SHA"],"cad_editor":"OpenCADStudio v2026.44"}))'
+      - name: Install pinned browser verification tools
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.out/qa-browsers
+        run: |
+          npm install --prefix .out/qa --no-audit --no-fund playwright@1.62.1
+          .out/qa/node_modules/.bin/playwright install --with-deps chromium
+      - name: Verify the assembled web app under /spark/
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.out/qa-browsers
+        run: node tests/web-release.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-verification
+          path: .out/test-results
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-web-site
+          path: .out/site
+          include-hidden-files: true
+          retention-days: 3
       - uses: actions/upload-artifact@v4
         with:
           name: browser-engine
           path: .out/browser
           retention-days: 3
   desktop:
+    if: github.event_name == 'workflow_dispatch' && inputs.build_windows
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -67,7 +110,7 @@ jobs:
           retention-days: 3
   pages:
     if: github.ref == 'refs/heads/main'
-    needs: [browser-engine, desktop]
+    needs: [browser-engine]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -77,20 +120,10 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: browser-engine
-          path: .out/browser
-      - name: Assemble the matching site
-        run: |
-          mkdir -p .out/site/engine
-          cp -a web/. .out/site/
-          cp -a .out/browser/wwwroot/. .out/site/engine/
-          find .out/site/engine -type f \( -name '*.br' -o -name '*.gz' -o -name '*.pdb' \) -delete
-          cp THIRD_PARTY_NOTICES.md .out/site/
-          touch .out/site/.nojekyll
-          python -c 'import json,os; open(".out/site/version.json","w").write(json.dumps({"commit":os.environ["GITHUB_SHA"]}))'
+          name: verified-web-site
+          path: .out/site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

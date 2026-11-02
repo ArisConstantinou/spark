@@ -3,7 +3,7 @@ import {readFile,stat} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
-const root=fileURLToPath(new URL('./web/',import.meta.url));
+const root=process.env.SPARK_WEB_ROOT||fileURLToPath(new URL('./web/',import.meta.url));
 const decoder=process.env.SPARK_CAD_DLL||fileURLToPath(new URL('./.out/cad/CadBridge.dll',import.meta.url));
 const engineRoot=process.env.SPARK_ENGINE_ROOT||fileURLToPath(new URL('./.out/browser/wwwroot/',import.meta.url));
 const dotnet=process.env.SPARK_DOTNET||'dotnet';

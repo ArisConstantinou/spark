@@ -12,7 +12,17 @@ For Windows, extract the complete portable package and run **SparkWorld.exe** be
 
 Projects save on the current device. Browser and desktop profiles are separate. Export **JSON** to back up or transfer the complete editable project, including original source bytes and source offsets. Clearing app/browser data can remove local projects.
 
-## Drawing
+## Native web CAD Studio
+
+Open **CAD Studio** from the desktop sidebar or mobile **More**. It embeds Open CAD Studio v2026.44 for native DWG/DXF editing, layers, blocks, paper/model layouts and DWG 2018 copy export. Files are processed locally in WebAssembly. The first load downloads a roughly 90 MB main module and supporting fonts/resources.
+
+The electrical-reference import report offers **Edit source in CAD Studio**. The original source is handed over locally. Existing electrical annotations and circuits stay saved in the Electrical workspace; the two workspaces do not silently merge edits. CAD Studio exports a distinct copy rather than replacing the imported source.
+
+The electrical workspace keeps its existing drafting workflow and improved source-layer inspector. Custom fonts, referenced files, unusual entities and physical mobile behavior require drawing-specific verification. Keep your originals.
+
+The current Windows package remains separate; this release does not claim the new CAD Studio is packaged or verified in Windows.
+
+## Electrical-reference drawing
 
 Import DWG, DXF, PNG, JPEG, WebP or SparkWorld JSON. Review coverage and declared units; correct units explicitly when necessary. Calibrate plan images from a known distance.
 
@@ -50,4 +60,10 @@ The optional local native API uses `cad/CadBridge.csproj`, `SPARK_CAD_DLL` and `
 
 Compile `desktop/SparkWorld.Desktop.csproj` on Windows with the .NET Framework targeting pack, and include the matching `web` directory beside the executable. Its native engine, custom file navigator, guarded saves and window controls do not use OS file dialogs or JavaScript alert/confirm.
 
-GitHub Actions packages both targets and runs native round trips. Private local drawings and their screenshots must never be committed. See CONTRIBUTING.md and THIRD_PARTY_NOTICES.md.
+GitHub Actions validates native round trips and the assembled web release; Windows packaging is opt-in. Private local drawings and their screenshots must never be committed. See CONTRIBUTING.md and THIRD_PARTY_NOTICES.md.
+
+## License and corresponding source
+
+SparkWorld integration and the combined web distribution are licensed under **GNU GPL version 3**; see LICENSE. Copyright 2026 Aris Constantinou for SparkWorld-authored code. Open CAD Studio is copyright Hakan Seven and contributors. Existing MIT component notices and font OFL notices remain in THIRD_PARTY_NOTICES.md and the distributed component.
+
+See [CAD sources](https://arisconstantinou.github.io/spark/cad-sources.html) for the exact upstream version, source archive, integration transformations and license texts. Reproduce the pinned editor payload with `python tools/prepare-cad-editor.py --output .out/site/app`. GitHub Actions tests the assembled `/spark/` site before deploying that same artifact. Windows builds are opt-in through workflow dispatch.

@@ -42,7 +42,7 @@ partial class Scene {
         if(rule=="nonzero")foreach(var ps in transformed){double area=0;for(int i=0;i<ps.Count;i++){var a=ps[i];var b=ps[(i+1)%ps.Count];area+=a[0]*b[1]-b[0]*a[1];}if(area<0)ps.Reverse();}
         var vertices=transformed.SelectMany(l=>l).ToArray();if(vertices.Length<3||vertices.Any(p=>p.Any(v=>!Numbers.Finite(v))))throw new Exception("Invalid filled CAD geometry");
         all.AddRange(vertices);string d=string.Join(" ",transformed.Select(ps=>"M"+string.Join(" L",ps.Select(p=>F(p[0])+","+F(p[1])))+" Z"));
-        items.Add(new{id="g"+count++,owner,layer,visibilityLayers=visibility.GetValueOrDefault(e)??[layer],kind="path",d,fill,fillRule=rule,patterns,sourceType=e.GetType().Name,bounds=new[]{vertices.Min(p=>p[0]),vertices.Min(p=>p[1]),vertices.Max(p=>p[0]),vertices.Max(p=>p[1])}});
+        items.Add(new{id="g"+count++,owner,layer,visibilityLayers=ValueOrDefault(visibility,e)??[layer],kind="path",d,fill,fillRule=rule,patterns,sourceType=e.GetType().Name,bounds=new[]{vertices.Min(p=>p[0]),vertices.Min(p=>p[1]),vertices.Max(p=>p[0]),vertices.Max(p=>p[1])}});
     }
     void CompactDimension(int start,string sourceType){
         var generated=items.Skip(start).ToArray();items.RemoveRange(start,items.Count-start);

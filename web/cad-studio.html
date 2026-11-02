@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+ <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+ <meta name="theme-color" content="#111922"><title>SparkWorld · CAD Studio</title>
+ <link rel="stylesheet" href="style.css"><link rel="stylesheet" href="cad-studio.css">
+ <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%23076aff'/%3E%3Cpath d='M23 5L11 23h10l-4 13 14-21H20z' fill='white'/%3E%3C/svg%3E">
+</head>
+<body class="cad-studio-page">
+ <header class="topbar">
+  <a class="brand" href="./"><div class="brand-lockup"><strong>Spark<span class="brand-word">World</span></strong><small>Created by Aris</small></div></a>
+  <div class="studio-heading"><strong>CAD Studio</strong><span id="studio-document">Native DWG workspace</span></div>
+  <div class="header-actions"><button id="import" disabled>Open drawing</button><button id="save" class="primary" disabled>Save DWG copy</button></div>
+ </header>
+ <main class="studio-workspace">
+  <nav class="studio-rail" aria-label="Workspace navigation">
+   <button id="electrical-nav"><svg viewBox="0 0 24 24"><path d="m14 2-9 12h7l-2 8L21 9h-8z"/></svg>Electrical</button>
+   <button class="active" aria-current="page" id="cad-nav"><svg viewBox="0 0 24 24"><path d="M3 21V3h18v18zM8 3v5H3M13 3v3M18 3v5M3 13h3M3 18h5M9 17l8-8M10 9h7v7"/></svg>CAD</button>
+   <button id="fit" disabled><svg viewBox="0 0 24 24"><path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6"/></svg>Fit</button>
+   <button id="history-menu" disabled><svg viewBox="0 0 24 24"><path d="M3 10a9 9 0 1 1 2 8M3 3v7h7M12 7v5l3 2"/></svg>History</button>
+   <button id="studio-info"><svg viewBox="0 0 24 24"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20M12 10v7M12 6v1"/></svg>About</button>
+  </nav>
+  <section class="studio-editor" aria-label="Native DWG editor">
+   <div class="studio-context"><span><i id="engine-dot"></i><strong id="engine-status" role="status">Loading CAD engine…</strong></span><span id="document-status">Files stay on this device</span></div>
+   <div class="studio-frame-wrap"><iframe id="cad-frame" title="Open CAD Studio drawing editor" allow="" referrerpolicy="no-referrer"></iframe>
+    <div id="studio-loading" class="studio-loading" role="status"><span class="spinner"></span><h1>Opening your CAD workspace</h1><p>The local WebAssembly engine is loading.<br>DWG and DXF files are processed on your device.</p><button id="welcome-import" hidden>Open drawing</button></div>
+   </div>
+  </section>
+ </main>
+ <footer class="studio-footer"><span>Open CAD Studio v2026.44 · GPL-3.0</span><span id="studio-operation">Local preview · separate from electrical design entries</span></footer>
+ <input id="file-input" type="file" aria-label="Open DWG or DXF" hidden>
+ <dialog id="dialog"><form method="dialog" id="dialog-form"><div class="dialog-head"><h2 id="dialog-title"></h2><button type="button" id="dialog-close" aria-label="Close dialog">×</button></div><div id="dialog-body"></div><div id="dialog-actions" class="dialog-actions"></div></form></dialog>
+ <div id="toast" class="toast" role="status" hidden></div>
+ <script type="module" src="cad-studio.js"></script>
+</body></html>
