@@ -115,7 +115,7 @@ function more(){dialog('Drawing actions','<p class="dialog-copy">CAD geometry an
  {label:'Export complete project JSON',run:()=>task('Exporting complete project…',async()=>{await saveCurrent();await download(JSON.stringify(project),filename('json'),'application/json');})},
  {label:'Source and licenses',run:()=>{window.open(new URL('cad-sources.html',document.baseURI),'_blank','noopener');}},
  ]);}
-async function poll(force=false){if(((busy||cadGestures?.active)&&!force)||!api()||api().busy)return;const epoch=++pollSerial,state=await read({op:'state'});if(epoch!==pollSerial)return;nativeState=state;nativeControls?.update(state);document.body.classList.toggle('cad-viewport-hosted',!!state.hosted_view);if(welcome)welcome.hidden=!!currentDocument(state);bindDocument(state);if(!project){$('#point-summary').hidden=true;return;}$('#studio-document').textContent=project.name;
+async function poll(force=false){if(((busy||cadGestures?.active)&&!force)||!api()||api().busy)return;const epoch=++pollSerial,state=await read({op:'state'});if(epoch!==pollSerial)return;nativeState=state;nativeControls?.update(state);document.body.classList.toggle('cad-viewport-hosted',!!state.hosted_view);if(welcome){welcome.hidden=!!currentDocument(state);document.body.classList.toggle('ui-welcome',!currentDocument(state));}bindDocument(state);if(!project){$('#point-summary').hidden=true;return;}$('#studio-document').textContent=project.name;
  const key=state.document_id+'|'+state.revision+'|'+state.selection_revision+'|'+state.selection.join(',');if(key!==lastSelection){const picked=state.selection[0]?(await read({op:'query',handles:[state.selection[0]],detail:'geometry'})).entities[0]:null;if(epoch!==pollSerial)return;lastSelection=key;selection=picked;$('#point-summary').hidden=!selection;if(selection)$('#point-summary-label').textContent=pointForEntity(project,selection)?.label||selection.display_type||selection.type;}
  const revisionKey=state.document_id+':'+state.revision;
  if(lastRevision!==revisionKey){lastRevision=revisionKey;project.dirty=project.savedRevision!==state.revision;clearTimeout(saveTimer);saveTimer=null;}
@@ -139,6 +139,7 @@ while(!api())await delay(50);while(api().busy)await delay(50);await poll();
 // Native Open/Drop and Ctrl+S use the same project boundary as the parent UI.
 // Font and other non-CAD file inputs continue to the native editor unchanged.
 nativeControls=await mountCadControls({read,write:mutate,task,save:saveCurrent,dialog,toast,frame:$('#cad-frame'),compact,switchDocument,switchLayout,describeDocument:d=>{const p=projects.get(d.id);return{displayName:p?.name||d.path?.split(/[\\/]/).at(-1)||d.title,dirty:!p||p.dirty||p.savedRevision!==d.revision};}});
+nativeControls.update(nativeState);
 const inner=$('#cad-frame').contentWindow;
 // A deliberate mouse double-click opens the host's Details, rather than the
 // engine's separate rich-text/property window. A normal click only selects.
