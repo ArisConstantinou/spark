@@ -74,6 +74,13 @@ jobs:
           cp THIRD_PARTY_NOTICES.md LICENSE .out/site/
           cp -a licenses .out/site/
           du -sh .out/cad-target .out/site/app
+      - name: Retain the compiled component for bounded diagnosis
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-cad-host
+          path: .out/site/app
+          include-hidden-files: true
+          retention-days: 3
       - name: Reuse the verified public CAD fixtures
         uses: actions/download-artifact@v4
         with:

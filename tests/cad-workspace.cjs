@@ -31,7 +31,9 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  const point=await page.evaluate(()=>Object.values(sparkWorkspace.project.points)[0]);const entity=(await cad({op:'query',handles:[point.handle],detail:'geometry'})).entities[0];
  check(entity?.type==='Block Reference','Palette click places a native socket block in the same CAD drawing');
  await cad({op:'undo'},true);check((await cad({op:'query',handles:[point.handle]})).entities.length===0,'One Undo removes the placed socket without exposing setup objects');
+ await page.locator('#history-menu').click();await page.waitForFunction(()=>document.querySelector('.cad-circuit-stats')?.textContent.includes('0 electrical points'));check((await page.locator('.cad-circuit-stats').textContent()).includes('0 electrical points'),'Circuit count excludes a symbol removed by Undo');await page.locator('#workspace-panel-close').click();
  await cad({op:'redo'},true);check((await cad({op:'query',handles:[point.handle]})).entities.length===1,'One Redo restores the placed socket');
+ await page.locator('#history-menu').click();await page.waitForFunction(()=>document.querySelector('.cad-circuit-stats')?.textContent.includes('1 electrical points'));check((await page.locator('.cad-circuit-stats').textContent()).includes('1 electrical points'),'Redo restores the actual circuit point count');await page.locator('#workspace-panel-close').click();
  await cad({op:'entities_transform',handles:[point.handle],action:'move',vector:[25,40]},true);
  await page.evaluate(()=>sparkWorkspace.save());
  await cad({op:'click',point:[entity.position[0]+25-160,entity.position[1]+40,0]},true);
@@ -61,5 +63,9 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  const bounds=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,nav:[...document.querySelectorAll('.studio-rail button')].map(b=>b.getBoundingClientRect().toJSON())}));check(!bounds.overflow&&bounds.nav.every(b=>b.height>=44&&b.x>=0&&b.right<=390),'Mobile has five usable bottom actions without page overflow');
  await require('./cad-own-controls.cjs')({page,cad,check,out});
  check(report.errors.length===0,'No unhandled browser errors');check(report.external.length===0,'No external requests or drawing uploads');report.status='PASS';
+ }catch(error){
+  const diagnostic=await page?.evaluate(async()=>{const s=await window.sparkWorkspace?.read({op:'state'});return{url:location.href,operation:document.querySelector('#studio-operation')?.textContent,toast:document.querySelector('#toast')?.textContent,layout:s?.layout,command:s?.command,modal:s?.modal,hosted:s?.hosted_view};}).catch(()=>null);
+  await page?.screenshot({path:path.join(out,'cad-workspace-failure.png')}).catch(()=>{});
+  throw Error(error.stack+'\nWorkspace diagnostic: '+JSON.stringify(diagnostic));
  }finally{await context?.close();}
 };
