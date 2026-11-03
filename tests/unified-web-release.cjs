@@ -18,6 +18,7 @@ const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
  process.env.SPARK_TEST_DPR='2';process.env.SPARK_HOSTED_RENDERER='1';
  await require('./cad-workspace.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',fixture:path.resolve(process.env.SPARK_FIXTURE||'.out/layer-fixture.dwg'),out,check});
  await require('./cad-context.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',fixture:path.resolve(process.env.SPARK_FIXTURE||'.out/layer-fixture.dwg'),out,check});
+ await require('./cad-polling.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',fixture:path.resolve(process.env.SPARK_FIXTURE||'.out/layer-fixture.dwg'),out,check});
  const context=await browser.newContext({viewport:{width:1440,height:1000},deviceScaleFactor:2,serviceWorkers:'block',acceptDownloads:true});
  await require('./legacy-ui-profile.cjs')(context);
  await context.route('**/*',r=>{const u=new URL(r.request().url());if(!['http:','https:'].includes(u.protocol))return r.continue();if(u.origin!=='http://127.0.0.1:5173'){report.external.push(u.origin);return r.abort();}if(!u.pathname.startsWith('/spark/')&&!u.pathname.startsWith('/api/'))report.escapedPrefix.push(u.pathname);return r.continue();});
