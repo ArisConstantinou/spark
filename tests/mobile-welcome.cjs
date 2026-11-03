@@ -1,0 +1,12 @@
+const path=require('node:path');
+module.exports=async function({page,check,out}){
+ await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+ await page.screenshot({path:path.join(out,'mobile-default-welcome-390.png')});
+ const initial=await page.evaluate(()=>{const box=e=>{const r=e.getBoundingClientRect();return{x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};},visible=e=>!!e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden';const hero=document.querySelector('.cad-own-welcome>svg'),art=box(hero),buttons=[...document.querySelectorAll('.ui-launchers button')].filter(visible).map(box),nav=[...document.querySelectorAll('.studio-rail button')].filter(visible).map(box);return{art,buttons,nav,overflow:document.documentElement.scrollWidth>innerWidth,overlap:buttons.some(b=>Math.min(b.right,art.right)-Math.max(b.x,art.x)>1&&Math.min(b.bottom,art.bottom)-Math.max(b.y,art.y)>1)};});
+ check(!initial.overlap,'Default mobile launchers do not cover the welcome artwork');
+ check(initial.nav.length===5&&initial.nav.every(b=>b.height>=44&&b.x>=0&&b.right<=390),'Fresh mobile default shows five usable bottom navigation actions');
+ check(!initial.overflow,'Fresh mobile welcome has no page overflow');
+ for(const width of [320,390,430]){await page.setViewportSize({width,height:740});await page.waitForTimeout(150);const fit=await page.evaluate(()=>{const bounds=s=>document.querySelector(s).getBoundingClientRect(),nav=bounds('.studio-rail'),open=bounds('#cad-own-welcome-open'),fresh=bounds('#cad-own-welcome-new'),heading=bounds('.cad-own-welcome h1');return{nav,open,fresh,heading,overflow:document.documentElement.scrollWidth>innerWidth};});check(!fit.overflow&&fit.open.x>=0&&fit.fresh.right<=width&&fit.open.bottom<=fit.nav.top&&fit.fresh.bottom<=fit.nav.top,'Welcome actions fit above mobile navigation at '+width);}
+ await page.setViewportSize({width:390,height:844});await page.waitForTimeout(150);await page.locator('#studio-info').click();await page.getByRole('button',{name:'UI Settings / Layout Lab',exact:true}).click();await page.locator('.ui-lab').waitFor({state:'visible'});check(true,'UI Settings remain reachable from More before opening a drawing');await page.locator('[data-ui-cancel-settings]').click();
+ await page.setViewportSize({width:1440,height:1000});await page.waitForTimeout(200);
+};
