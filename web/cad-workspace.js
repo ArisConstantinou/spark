@@ -103,6 +103,7 @@ async function migrateLegacy(id){const old=await legacyStorage.get(id);if(!old)t
  project.dirty=true;await saveCurrent();closePanel();toast('Imported a copy. The earlier saved drawing is unchanged.');
 });}
 function more(){dialog('Drawing actions','<p class="dialog-copy">CAD geometry and electrical data belong to this workspace.</p>',[
+ {label:'UI Settings / Layout Lab',run:()=>{setTimeout(()=>nativeControls.openSettings(),0);}},
  ...(!api().state?.hosted_view?[{label:'Show / hide full CAD tools',run:async()=>{closePanel();await api().toggleCanvas();}}]:[]),
  {label:'Fit drawing',run:()=>task('Fitting drawing…',()=>mutate({op:'action',name:'zoom_extents'}))},
  {label:'Drawing layers',run:()=>openPanel('Layers')},

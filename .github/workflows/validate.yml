@@ -82,6 +82,10 @@ jobs:
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.out/qa-browsers
         run: node tests/unified-web-release.cjs
+      - name: Verify configurable layouts and mobile UI settings
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.out/qa-browsers
+        run: node tests/run-ui-layout-lab.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
