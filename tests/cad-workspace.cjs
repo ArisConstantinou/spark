@@ -1,6 +1,6 @@
 // Acceptance on the assembled main page and the pinned native CAD component.
 const fs=require('node:fs/promises'),path=require('node:path');
-module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,check}){
+module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,check,preparePage}){
  const report={errors:[],external:[]};let page,context;
  async function ready(){for(let i=0;i<4;i++){
   const outcome=await page.waitForFunction(()=>{const modal=document.querySelector('#dialog');if(modal?.open&&document.querySelector('#dialog-title')?.textContent==='CAD graphics notice')return 'graphics';if(window.sparkWorkspace?.project?.working&&!sparkWorkspace.busy)return 'ready';},{},{timeout:120000});
@@ -13,7 +13,7 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  context=await browser.newContext({viewport:{width:1440,height:1000},deviceScaleFactor:Number(process.env.SPARK_TEST_DPR||1),serviceWorkers:'block',acceptDownloads:true});
  await require('./legacy-ui-profile.cjs')(context);
  await context.route('**/*',r=>{const u=new URL(r.request().url());if(['http:','https:'].includes(u.protocol)&&(u.origin!=='http://127.0.0.1:5173'||(!u.pathname.startsWith(new URL(baseUrl).pathname)&&!u.pathname.startsWith('/api/')))){report.external.push(u.href);return r.abort();}return r.continue();});
- page=await context.newPage();page.setDefaultTimeout(30000);page.on('pageerror',e=>report.errors.push(e.message));await page.goto(baseUrl+'?workspace=cad'+(process.env.SPARK_HOSTED_RENDERER==='1'?'&renderer=host':''));await page.waitForFunction(()=>window.sparkWorkspace,{},{timeout:120000});
+ page=await context.newPage();await preparePage?.(page,context);page.setDefaultTimeout(30000);page.on('pageerror',e=>report.errors.push(e.message));await page.goto(baseUrl+'?workspace=cad'+(process.env.SPARK_HOSTED_RENDERER==='1'?'&renderer=host':''));await page.waitForFunction(()=>window.sparkWorkspace,{},{timeout:120000});
  const cad=async(request,write=false)=>{let timer;console.log('CAD request '+request.op+(request.cmd?' '+request.cmd:''));try{return await Promise.race([page.evaluate(({request,write})=>write?sparkWorkspace.mutate(request):sparkWorkspace.read(request),{request,write}),new Promise((_,reject)=>timer=setTimeout(()=>reject(Error('Native CAD request timed out: '+request.op)),120000))]);}finally{clearTimeout(timer);}};
  await require('./cad-import.cjs')({page,check});
  await page.locator('#file-input').setInputFiles(fixture);
@@ -81,6 +81,7 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  }catch(error){
   console.error(error.stack);const diagnostic=await Promise.race([page?.evaluate(()=>({url:location.href,operation:document.querySelector('#studio-operation')?.textContent,toast:document.querySelector('#toast')?.textContent})).catch(()=>null),new Promise(r=>setTimeout(()=>r({timeout:true}),5000))]);
   await page?.screenshot({path:path.join(out,'cad-workspace-failure.png'),timeout:5000}).catch(()=>{});
+  if(page)await fs.writeFile(path.join(out,'cad-workspace-failure.json'),JSON.stringify(await page.evaluate(async()=>({state:await sparkWorkspace.read({op:'state'}),selection:sparkWorkspace.selection,project:sparkWorkspace.project,busy:sparkWorkspace.busy,toast:document.querySelector('#toast')?.textContent})).catch(()=>({})),null,2));
   throw Error(error.stack+'\nWorkspace diagnostic: '+JSON.stringify(diagnostic));
  }finally{await context?.close();}
 };
