@@ -12,7 +12,8 @@ static class MTextFrameFixture {
    var doc=new CadDocument();doc.Header.Version=ACadVersion.AC1032;
    var layer=new Layer("FRAME_TEST");doc.Layers.Add(layer);
    MText Text(string value,int flags,double x,bool columns=false) {
-    var text=new MText{Value=value,InsertPoint=new XYZ(x,25,0),Height=2,RectangleWidth=18,Rotation=Math.PI/7,Layer=layer,BackgroundFillFlags=(BackgroundFillFlags)flags};
+    var angle=Math.PI/7;
+    var text=new MText{Value=value,InsertPoint=new XYZ(x,25,0),Height=2,RectangleWidth=18,AlignmentPoint=new XYZ(Math.Cos(angle),Math.Sin(angle),0),Layer=layer,BackgroundFillFlags=(BackgroundFillFlags)flags};
     if(columns){text.ColumnData.ColumnType=ColumnType.DynamicColumns;text.ColumnData.AutoHeight=false;text.ColumnData.Width=18;text.ColumnData.Gutter=3;text.ColumnData.Heights.Add(-2.07);}
     return text;
    }
