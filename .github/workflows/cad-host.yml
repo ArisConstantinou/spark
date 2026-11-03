@@ -1,6 +1,11 @@
 name: Build and verify SparkWorld CAD viewport host
 on:
   workflow_dispatch:
+    inputs:
+      trace_open:
+        description: Build a diagnostic CAD component with open phase markers
+        type: boolean
+        default: false
   push:
     branches: [codex/cad-viewport-host]
     paths:
@@ -43,6 +48,9 @@ jobs:
         run: |
           python3 tools/prepare-cad-host.py .out/cad-source
           sh -n .out/cad-source/scripts/build-web-worker.sh
+      - name: Add native open diagnostics
+        if: inputs.trace_open
+        run: python3 tools/prepare-cad-open-trace.py .out/cad-source
       - name: Checkout the existing pinned codec source
         uses: actions/checkout@v4
         with:
@@ -119,7 +127,7 @@ jobs:
       - name: Retain the compiled component for bounded diagnosis
         uses: actions/upload-artifact@v4
         with:
-          name: compiled-cad-host
+          name: ${{ inputs.trace_open && 'cad-open-trace' || 'compiled-cad-host' }}
           path: .out/site/app
           include-hidden-files: true
           retention-days: 3
@@ -134,6 +142,7 @@ jobs:
           path: .out/test-results
           retention-days: 3
       - uses: actions/upload-artifact@v4
+        if: '!inputs.trace_open'
         with:
           name: verified-cad-host
           path: .out/site
