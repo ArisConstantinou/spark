@@ -8,7 +8,7 @@ from pathlib import Path
 SOURCES = {
     "src/io/web_worker.rs": "44d8b5b0b089d6503582555f6dc2b6510775f028e238a09d3ce543b9a46ca6f0",
     "src/io/mod.rs": "032f5690bdc495750e3600b26751518932d172921284afd4ed8496a8324edde9",
-    "src/app/update/file.rs": "e0d2b892c4879cae8db09058081fe7f86ce91239be4a2050d78babf078e1044a",
+    "src/app/update/file.rs": "c73d5dd5bb86ae0b16248c7c6c333e2dfcdd4927982a5489e6a3e37b588db687",
 }
 
 

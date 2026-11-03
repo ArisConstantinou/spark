@@ -67,12 +67,12 @@ async function openProject(saved,reuse=false,progress=null){
   }
  }
  await progress?.stage(1,'Opening the saved CAD drawing','Reading geometry, layers and blocks. Complex drawings can take longer.');
- await api().importFile(savedDrawingFile(saved),{dataBase64:saved.working.data});
+ const wantedLayout=saved.activeLayout||'Model';
+ await api().importFile(savedDrawingFile(saved),{dataBase64:saved.working.data,initialLayout:wantedLayout});
  await reviewGraphics();
  await progress?.stage(2,'Restoring project settings','Restoring layout, units, circuits and electrical notes.');
  const state=await read({op:'state'});
  bindDocument(state,saved);
- const wantedLayout=saved.activeLayout||'Model';
  if(state.layout!==wantedLayout){
   if(wantedLayout==='Model')await mutate({op:'run',cmd:'TILEMODE 1'});
   else await setLayout(wantedLayout);
@@ -92,7 +92,7 @@ async function importFile(file){if(!file)return;return task('Opening '+file.name
  const encoded=await readDrawing(file,progress.signal);await reviewGraphics();await saveAll();
  await progress.stage(1,'Opening the CAD drawing','Reading native geometry, layers and blocks. A small DWG can contain a complex drawing; this stage cannot be interrupted safely.');
  let unchanged=false;
- await api().importFile(file,{dataBase64:encoded,onOpened:state=>{unchanged=currentDocument(state)?.dirty===false;}});
+ await api().importFile(file,{dataBase64:encoded,initialLayout:'Model',onOpened:state=>{unchanged=currentDocument(state)?.dirty===false;}});
  await reviewGraphics();
  const opened=await read({op:'state'});
  bindDocument(opened,createProject(file.name.replace(/\.[^.]+$/,'')));
