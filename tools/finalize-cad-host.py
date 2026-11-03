@@ -11,6 +11,7 @@ import subprocess
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("source")
 parser.add_argument("output")
+parser.add_argument("--codec-source")
 args = parser.parse_args()
 source, output = Path(args.source).resolve(), Path(args.output).resolve()
 html_file = output / "index.html"
@@ -28,9 +29,33 @@ html = html.replace('</head>', '<link rel="icon" href="./logo.svg" type="image/s
 html_file.write_text(html, encoding="utf-8")
 (output / "videos.json").write_text("[]\n", encoding="utf-8")
 shutil.copyfile(source / "LICENSE", output / "LICENSE-GPL-3.0.txt")
-patch = subprocess.check_output(["git", "diff", "--", "src/app/view/mod.rs", "src/app/control/mod.rs", "src/app/control/entities.rs", "scripts/build-web-worker.sh"], cwd=source)
+patch = subprocess.check_output(["git", "diff", "--", "src/app/view/mod.rs", "src/app/control/mod.rs", "src/app/control/entities.rs", "scripts/build-web-worker.sh", "Cargo.toml", "Cargo.lock"], cwd=source)
 (output / "SPARKWORLD-SOURCE.patch").write_bytes(patch)
 upstream = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
+codec_metadata = {}
+if args.codec_source:
+    codec = Path(args.codec_source).resolve()
+    codec_revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=codec, text=True).strip()
+    if codec_revision != "53e6420c4df4d207409798c2719d32fc6cf2811d":
+        raise ValueError("Unreviewed codec source")
+    writer = "src/io/dwg/dwg_stream_writers/object_writer/entities.rs"
+    changed = subprocess.check_output(["git", "diff", "--name-only"], cwd=codec, text=True).splitlines()
+    if changed != [writer]:
+        raise ValueError("Unexpected codec modifications")
+    codec_patch = subprocess.check_output(["git", "diff", "--", writer], cwd=codec)
+    (output / "SPARKWORLD-CODEC.patch").write_bytes(codec_patch)
+    (output / "acadrust-source").mkdir(exist_ok=True)
+    shutil.copyfile(codec / writer, output / "acadrust-source" / "entities.rs")
+    shutil.copyfile(codec / "LICENSE", output / "LICENSE-acadrust-MPL-2.0.txt")
+    (output / "acadrust-source" / "README.txt").write_text(
+        "Modified Source Code Form, MPL-2.0. Original source and all other files:\n"
+        "https://github.com/HakanSeven12/acadrust/tree/" + codec_revision + "\n"
+        "Modified file: " + writer + "\n"
+        "SparkWorld change: emit the background fields required by R2018 MTEXT text-frame flags.\n"
+        "Reproduce using tools/prepare-cad-codec.py and .github/workflows/cad-host.yml in the integration commit.\n",
+        encoding="utf-8")
+    codec_metadata = {"codec_upstream_commit": codec_revision,
+                      "codec_patch_sha256": hashlib.sha256(codec_patch).hexdigest()}
 (output / "SPARKWORLD-HOST.txt").write_text(
     "OpenCADStudio viewport host for SparkWorld. GPL-3.0. Hakan Seven and contributors.\n"
     "Upstream: https://github.com/HakanSeven12/OpenCADStudio/tree/" + upstream + "\n"
@@ -45,5 +70,6 @@ manifest = {"upstream_commit": upstream, "presentation": "sparkworld-viewport-ho
             "tools": {name: subprocess.check_output([name, "--version"], text=True).strip()
                       for name in ("rustc", "trunk", "wasm-bindgen")},
             "patch_sha256": hashlib.sha256(patch).hexdigest(), "files": files}
+manifest.update(codec_metadata)
 (output / ".component-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 print(json.dumps({"upstream": upstream, "files": len(files), "payload_bytes": sum(p.stat().st_size for p in output.rglob('*') if p.is_file())}))

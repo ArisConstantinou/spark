@@ -8,6 +8,8 @@ on:
       - 'tools/prepare-cad-host.py'
       - 'tools/cad-symbol-operation.rs'
       - 'tools/finalize-cad-host.py'
+      - 'tools/prepare-cad-codec.py'
+      - 'cad-tests/**'
       - 'web/**'
       - 'tests/cad-*.cjs'
 permissions:
@@ -38,6 +40,34 @@ jobs:
         run: |
           python3 tools/prepare-cad-host.py .out/cad-source
           sh -n .out/cad-source/scripts/build-web-worker.sh
+      - name: Checkout the existing pinned codec source
+        uses: actions/checkout@v4
+        with:
+          repository: HakanSeven12/acadrust
+          ref: 53e6420c4df4d207409798c2719d32fc6cf2811d
+          path: .out/cad-codec-source
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Generate the authored public CAD fixtures from source
+        run: |
+          dotnet run --project cad-tests/SparkWorld.CadTests.csproj -c Release -- --fixture .out/cad-fixture.dwg
+          dotnet run --no-build --project cad-tests/SparkWorld.CadTests.csproj -c Release -- --mtext-fixture .out/mtext-frame-fixture.dwg
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install the existing pinned browser verifier
+        run: |
+          npm install --prefix .out/qa --no-audit --no-fund playwright@1.62.1
+          .out/qa/node_modules/.bin/playwright install --with-deps chromium
+      - name: Reproduce the frame regression on the current released component
+        run: |
+          python3 tools/prepare-locked-cad-host.py --output .out/site/app
+          cp -a web/. .out/site/
+          node tests/cad-mtext-codec.cjs --expect-frame-failure
+      - name: Apply the pinned MTEXT wire-format correction
+        run: python3 tools/prepare-cad-codec.py .out/cad-source .out/cad-codec-source
       - uses: dtolnay/rust-toolchain@1.99.1
         with:
           targets: wasm32-unknown-unknown
@@ -70,7 +100,7 @@ jobs:
         run: trunk build --locked --release --public-url ./ --dist "$GITHUB_WORKSPACE/.out/site/app" --html-output index.html web-app.html
       - name: Prepare the owned web host
         run: |
-          python3 tools/finalize-cad-host.py .out/cad-source .out/site/app
+          python3 tools/finalize-cad-host.py .out/cad-source .out/site/app --codec-source .out/cad-codec-source
           cp -a web/. .out/site/
           cp THIRD_PARTY_NOTICES.md LICENSE .out/site/
           cp -a licenses .out/site/
@@ -82,18 +112,8 @@ jobs:
           path: .out/site/app
           include-hidden-files: true
           retention-days: 3
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '10.0.x'
-      - name: Generate the authored public CAD fixtures from source
-        run: dotnet run --project cad-tests/SparkWorld.CadTests.csproj -c Release -- --fixture .out/cad-fixture.dwg
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Install the existing pinned browser verifier
-        run: |
-          npm install --prefix .out/qa --no-audit --no-fund playwright@1.62.1
-          .out/qa/node_modules/.bin/playwright install --with-deps chromium
+      - name: Verify framed MTEXT in DWG and DXF with the independent reader
+        run: node tests/cad-mtext-codec.cjs
       - name: Verify the actual viewport host and custom tools
         run: node tests/cad-host-release.cjs
       - uses: actions/upload-artifact@v4
