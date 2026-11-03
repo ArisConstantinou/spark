@@ -20,6 +20,10 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  const initial=await page.evaluate(()=>sparkWorkspace.project);report.initial={name:initial.name,definitions:Object.keys(initial.definitions.blocks).length,originalFormat:initial.original?.format};
  check(Object.keys(initial.definitions.blocks).length===0,'Opening a source drawing does not seed unused library geometry or history');
  check((await cad({op:'state'})).documents.filter(d=>!d.start).length===1,'Opening keeps one working native drawing without a preparation copy');
+ const beforeInvalid=(await cad({op:'state'})).revision;
+ const invalid=await page.evaluate(()=>sparkWorkspace.mutate({op:'spark_symbol_place',name:'SPARKWORLD_INVALID_TEST',entities:[{type:'LwPolyline',vertices:[[0,0],[1,1]],layer:'0'},{type:'LwPolyline',vertices:[[0,0],[null,2]],layer:'0'}],insert:{position:[0,0],scale:1,layer:'MustNotBeCreated'}}).then(()=>false,()=>true));
+ check(invalid&&(await cad({op:'state'})).revision===beforeInvalid,'A malformed final symbol vector rejects the complete operation before any edit');
+ check(!(await cad({op:'records',collection:'layers',limit:10000})).records.some(row=>row.name==='MustNotBeCreated'),'Rejected placement leaves the original layer table unchanged');
  check(await page.locator('.studio-rail button').count()===5,'Main workspace has five primary actions');
  check(page.url().includes('?workspace=cad')&&await page.locator('#cad-frame').count()===1,'One native CAD viewport runs inside the owned main workspace');
  await page.locator('#workspace-layers').click();await page.locator('#native-show-all').click();await page.waitForFunction(()=>!sparkWorkspace.busy);
@@ -71,6 +75,7 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  const bounds=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,nav:[...document.querySelectorAll('.studio-rail button')].map(b=>b.getBoundingClientRect().toJSON())}));check(!bounds.overflow&&bounds.nav.every(b=>b.height>=44&&b.x>=0&&b.right<=390),'Mobile has five usable bottom actions without page overflow');
  await require('./cad-own-controls.cjs')({page,cad,check,out});
  await require('./cad-annotations.cjs')({page,cad,check,out});
+ await require('./cad-lazy-symbols.cjs')({page,cad,check});
  check(report.errors.length===0,'No unhandled browser errors');check(report.external.length===0,'No external requests or drawing uploads');report.status='PASS';
  }catch(error){
   console.error(error.stack);const diagnostic=await Promise.race([page?.evaluate(()=>({url:location.href,operation:document.querySelector('#studio-operation')?.textContent,toast:document.querySelector('#toast')?.textContent})).catch(()=>null),new Promise(r=>setTimeout(()=>r({timeout:true}),5000))]);

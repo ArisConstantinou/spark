@@ -3,6 +3,8 @@
 import {pendingCadFile,consumeCadFile} from './cad-transfer.js';
 import {setupDesktop} from './desktop-ui.js';
 import {desktop} from './platform.js';
+// A new viewport API must not reuse a cached index from an older component.
+const CAD_CORE='af14adc49352d9d6c6f4d686be6ee405b8ec7aa9';
 import {escape as esc} from './model.js';
 const $=s=>document.querySelector(s),frame=$('#cad-frame');
 const unifiedWeb=!desktop&&document.body.dataset.sparkWorkspace==='cad';
@@ -33,7 +35,7 @@ $('#studio-info').onclick=()=>dialog('CAD Studio · Open CAD Studio',`<p class="
 desktopUi=setupDesktop({dialog,toast,importFile,dirty,save,discard:()=>{pendingDownloads.clear();state=null;disposed=true;},confirmAction,sourceName:()=>sourceName});
 window.addEventListener('beforeunload',e=>{if(!disposed&&dirty()){e.preventDefault();e.returnValue='';}});window.addEventListener('pagehide',()=>{disposed=true;clearInterval(pollTimer);});
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();save().catch(error=>toast(error.message));}});
-async function initialize(){try{localStorage.setItem('opencadstudio.automation','1');}catch{}const engineUrl=new URL('app/index.html',document.baseURI);if(new URLSearchParams(location.search).get('renderer')==='host'||unifiedWeb)engineUrl.searchParams.set('spark_host','1');frame.src=engineUrl;await new Promise((resolve,reject)=>{frame.onload=resolve;frame.onerror=()=>reject(Error('The CAD editor page could not load.'));setTimeout(()=>reject(Error('The CAD editor page timed out.')),120000);});const inner=frame.contentWindow;
+async function initialize(){try{localStorage.setItem('opencadstudio.automation','1');}catch{}const engineUrl=new URL('app/index.html',document.baseURI);if(new URLSearchParams(location.search).get('renderer')==='host'||unifiedWeb)engineUrl.searchParams.set('spark_host','1');if(unifiedWeb)engineUrl.searchParams.set('spark_core',CAD_CORE);frame.src=engineUrl;await new Promise((resolve,reject)=>{frame.onload=resolve;frame.onerror=()=>reject(Error('The CAD editor page could not load.'));setTimeout(()=>reject(Error('The CAD editor page timed out.')),120000);});const inner=frame.contentWindow;
  // Keep GUI exports inside the same themed host save flow.
  inner.openCadStudioSaveFile=(name,bytes)=>{const id=state?.document_id;pendingDownloads.add(id);deliver(new Uint8Array(bytes),name).then(ok=>{if(ok!==false)pendingDownloads.delete(id);refresh();}).catch(e=>toast('Export failed: '+e.message));};
  const nativeClick=inner.HTMLInputElement.prototype.click;inner.HTMLInputElement.prototype.click=function(){if(this.type!=='file')return nativeClick.call(this);if(!desktop){this.removeAttribute('accept');return nativeClick.call(this);}const input=this;desktopUi.chooseFile().then(file=>{if(!file){input.dispatchEvent(new inner.Event('cancel'));return;}const transfer=new inner.DataTransfer();transfer.items.add(new inner.File([file.bytes],file.name));input.files=transfer.files;input.dispatchEvent(new inner.Event('change',{bubbles:true}));}).catch(e=>toast(e.message));};

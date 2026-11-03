@@ -27,17 +27,20 @@ export function drawingLoader(file){
   finish(){if(stopped)return;stopped=true;clearInterval(clock);clearInterruptedImport();overlay.remove();roots.forEach((root,i)=>root.inert=wasInert[i]);if(previousFocus?.isConnected)previousFocus.focus({preventScroll:true});},
  };
 }
-export async function readDrawing(file,signal){
+export async function readSelectedFile(file,signal,{text=false}={}){
  signal?.throwIfAborted();
- const bytes=await new Promise((resolve,reject)=>{
+ return new Promise((resolve,reject)=>{
   const reader=new FileReader(),abort=()=>{reader.abort();reject(signal.reason);};
   signal?.addEventListener('abort',abort,{once:true});
   const clean=()=>signal?.removeEventListener('abort',abort);
-  reader.onload=()=>{clean();resolve(new Uint8Array(reader.result));};
+  reader.onload=()=>{clean();resolve(text?reader.result:new Uint8Array(reader.result));};
   reader.onerror=()=>{clean();reject(reader.error||Error('The selected file could not be read.'));};
   reader.onabort=()=>{clean();reject(signal?.reason||Error('Reading cancelled.'));};
-  reader.readAsArrayBuffer(file);
+  if(text)reader.readAsText(file);else reader.readAsArrayBuffer(file);
  });
+}
+export async function readDrawing(file,signal){
+ const bytes=await readSelectedFile(file,signal);
  // Multiples of three make independently encoded chunks join losslessly.
  // Release each short binary string instead of retaining a file-sized one.
  const chunks=[];

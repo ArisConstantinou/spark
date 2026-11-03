@@ -29,6 +29,7 @@ const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
  const raw=await fs.readFile(exportPath);check(raw.subarray(0,6).toString()==='AC1032','DXF work exports as genuine DWG 2018');
  const inspection=JSON.parse(execFileSync(process.env.SPARK_DOTNET||'dotnet',[process.env.SPARK_CAD_DLL||'.out/cad/CadBridge.dll','inspect','dwg'],{input:raw,maxBuffer:8*1024*1024}).toString());check(inspection.types.Line===1,'Independent CAD decoder verifies the exported DXF line');
  const lock=JSON.parse(await fs.readFile('tools/cad-host-component.json','utf8'));
+ check(new URL(await page.locator('#cad-frame').getAttribute('src'),page.url()).searchParams.get('spark_core')===lock.integration_commit,'The native index URL pins the reviewed core so a stale cached viewport cannot mix API versions');
  const manifestResponse=await context.request.get('http://127.0.0.1:5173/spark/app/.component-manifest.json'),manifestBytes=await manifestResponse.body();check(manifestResponse.ok()&&hash(manifestBytes)===lock.manifest_sha256,'Served CAD manifest matches the exact reviewed component');
  const manifest=JSON.parse(manifestBytes);for(const [name,digest]of Object.entries(manifest.files)){const response=await context.request.get('http://127.0.0.1:5173/spark/app/'+name);assert(response.ok()&&hash(await response.body())===digest,'Changed served CAD file: '+name);}
  check(true,'Every served CAD component file matches its pinned SHA-256');
