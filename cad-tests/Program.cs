@@ -6,6 +6,8 @@ using CSMath;
 using System.Text;
 using System.Text.Json;
 
+if(MTextFrameFixture.Run(args))return;
+
 var passed=new List<string>();
 void Assert(bool value,string message){if(!value)throw new Exception(message);}
 byte[] Dxf(CadDocument doc){using var bytes=new MemoryStream();using(var writer=new DxfWriter(bytes,doc,false))writer.Write();return bytes.ToArray();}

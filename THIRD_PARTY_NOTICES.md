@@ -1,5 +1,21 @@
 # Third-party components
 
+## acadrust DWG/DXF codec — MPL-2.0
+
+The viewport uses acadrust, pinned to
+https://github.com/HakanSeven12/acadrust/tree/53e6420c4df4d207409798c2719d32fc6cf2811d .
+SparkWorld modifies the R2018 MTEXT writer to emit the fields required by
+text-frame flags, without changing those flags or enabling background fill.
+The DXF reader also restores the explicit MTEXT annotative state from retained
+AcadAnnotative XDATA; ordinary unannotated text keeps its non-annotative default.
+The bounded transformation and exact dependency revision are recorded in
+tools/prepare-cad-codec.py. The modified files' complete Source Code Form is
+distributed at app/acadrust-source/entities.rs and
+app/acadrust-source/section_reader.rs, with its upstream source and
+reproduction instructions in app/acadrust-source/README.txt. The exact diff is
+app/SPARKWORLD-CODEC.patch and the complete license text is
+app/LICENSE-acadrust-MPL-2.0.txt. Original copyright and license notices remain.
+
 ## Open CAD Studio web viewport component — GPL-3.0
 
 Copyright Hakan Seven and contributors. Source and corresponding-source download:

@@ -4,7 +4,7 @@ import {pendingCadFile,consumeCadFile} from './cad-transfer.js';
 import {setupDesktop} from './desktop-ui.js';
 import {desktop} from './platform.js';
 // A new viewport API must not reuse a cached index from an older component.
-const CAD_CORE='af14adc49352d9d6c6f4d686be6ee405b8ec7aa9';
+const CAD_CORE='c423f020cebb09391bde613d147437c71385131c';
 import {escape as esc} from './model.js';
 const $=s=>document.querySelector(s),frame=$('#cad-frame');
 const unifiedWeb=!desktop&&document.body.dataset.sparkWorkspace==='cad';
