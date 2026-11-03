@@ -12,8 +12,8 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  try{
  context=await browser.newContext({viewport:{width:1440,height:1000},deviceScaleFactor:Number(process.env.SPARK_TEST_DPR||1),serviceWorkers:'block',acceptDownloads:true});
  await context.route('**/*',r=>{const u=new URL(r.request().url());if(['http:','https:'].includes(u.protocol)&&(u.origin!=='http://127.0.0.1:5173'||(!u.pathname.startsWith(new URL(baseUrl).pathname)&&!u.pathname.startsWith('/api/')))){report.external.push(u.href);return r.abort();}return r.continue();});
- page=await context.newPage();page.on('pageerror',e=>report.errors.push(e.message));await page.goto(baseUrl+'?workspace=cad'+(process.env.SPARK_HOSTED_RENDERER==='1'?'&renderer=host':''));await page.waitForFunction(()=>window.sparkWorkspace,{},{timeout:120000});
- const cad=(request,write=false)=>page.evaluate(({request,write})=>write?sparkWorkspace.mutate(request):sparkWorkspace.read(request),{request,write});
+ page=await context.newPage();page.setDefaultTimeout(30000);page.on('pageerror',e=>report.errors.push(e.message));await page.goto(baseUrl+'?workspace=cad'+(process.env.SPARK_HOSTED_RENDERER==='1'?'&renderer=host':''));await page.waitForFunction(()=>window.sparkWorkspace,{},{timeout:120000});
+ const cad=async(request,write=false)=>{let timer;console.log('CAD request '+request.op+(request.cmd?' '+request.cmd:''));try{return await Promise.race([page.evaluate(({request,write})=>write?sparkWorkspace.mutate(request):sparkWorkspace.read(request),{request,write}),new Promise((_,reject)=>timer=setTimeout(()=>reject(Error('Native CAD request timed out: '+request.op)),120000))]);}finally{clearTimeout(timer);}};
  await page.locator('#file-input').setInputFiles(fixture);
  await ready();
  const initial=await page.evaluate(()=>sparkWorkspace.project);report.initial={name:initial.name,definitions:Object.keys(initial.definitions.blocks).length,originalFormat:initial.original?.format};
@@ -66,8 +66,8 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  await require('./cad-annotations.cjs')({page,cad,check,out});
  check(report.errors.length===0,'No unhandled browser errors');check(report.external.length===0,'No external requests or drawing uploads');report.status='PASS';
  }catch(error){
-  const diagnostic=await page?.evaluate(async()=>{const s=await window.sparkWorkspace?.read({op:'state'});return{url:location.href,operation:document.querySelector('#studio-operation')?.textContent,toast:document.querySelector('#toast')?.textContent,layout:s?.layout,command:s?.command,modal:s?.modal,hosted:s?.hosted_view};}).catch(()=>null);
-  await page?.screenshot({path:path.join(out,'cad-workspace-failure.png')}).catch(()=>{});
+  console.error(error.stack);const diagnostic=await Promise.race([page?.evaluate(()=>({url:location.href,operation:document.querySelector('#studio-operation')?.textContent,toast:document.querySelector('#toast')?.textContent})).catch(()=>null),new Promise(r=>setTimeout(()=>r({timeout:true}),5000))]);
+  await page?.screenshot({path:path.join(out,'cad-workspace-failure.png'),timeout:5000}).catch(()=>{});
   throw Error(error.stack+'\nWorkspace diagnostic: '+JSON.stringify(diagnostic));
  }finally{await context?.close();}
 };
