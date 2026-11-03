@@ -6,11 +6,15 @@ module.exports=async function verifyAnnotations({page,cad,check,out}){
  await page.locator('[data-cad-command="MTEXT"]').click();
  await page.waitForFunction(()=>document.querySelector('#dialog').open&&document.querySelector('#dialog-title').textContent==='Multiline text');
  let state=await cad({op:'state'});check(!state.mtext_editor&&!state.text_editor&&!state.command,'Multiline tool opens the SparkWorld form without a native editor');
+ // Keep the authored annotation inside the saved Model view used for the
+ // real double-click after reload, independently of the drawing's origin.
+ const viewHeight=2*state.camera.distance*Math.tan(state.camera.fov_y/2);
+ const textX=Math.round(state.camera.target[0]-.2*viewHeight),textY=Math.round(state.camera.target[1]+.15*viewHeight);
  await page.getByRole('button',{name:'Create at coordinates',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('Enter the text to add.'));
  check(await page.locator('#dialog').evaluate(el=>el.open),'Empty text is rejected without closing the form');
  const value='Κουζίνα\n\\LΠρίζες\\l';await page.locator('#cad-text-value').fill(value);await page.locator('#cad-text-height').fill('20');await page.locator('#cad-text-width').fill('300');
- await page.locator('.cad-text-editor details>summary').click();await page.locator('#cad-text-x').fill('100');await page.locator('#cad-text-y').fill('200');
+ await page.locator('.cad-text-editor details>summary').click();await page.locator('#cad-text-x').fill(String(textX));await page.locator('#cad-text-y').fill(String(textY));
  await page.screenshot({path:path.join(out,'cad-own-text-desktop.png')});
  await page.getByRole('button',{name:'Create at coordinates',exact:true}).click();await page.waitForFunction(()=>!sparkWorkspace.busy&&!document.querySelector('#dialog').open);
  const rows=await cad({op:'query',type:'MText',detail:'full',limit:10000}),entity=rows.entities.find(e=>JSON.stringify(e).includes('Κουζίνα'));
@@ -58,15 +62,9 @@ module.exports=async function verifyAnnotations({page,cad,check,out}){
  check(restored.properties.common.entity_mode===2&&restored.properties.common.layer_handle===parseInt(layer.handle,16)&&JSON.stringify(restored.properties.dwg_x_direction)==='{"x":1,"y":0,"z":0}','DWG serialization resolves the correct Model space, layer handle and text direction');
  check((await cad({op:'query',handles:[single.handle]})).entities.length===1,'Placed single-line text survives native save and reopen');
  await page.setViewportSize({width:1440,height:1000});
- // Reload preserves the drawing's camera. Bring this authored annotation into
- // view before testing a physical mouse gesture at its drawing coordinates.
- await cad({op:'run',cmd:'ZOOM WINDOW'},true);
- await cad({op:'input',kind:'token',text:'40,110'},true);
- await cad({op:'input',kind:'token',text:'400,270'},true);
- await page.waitForFunction(()=>!sparkWorkspace.busy);
  await cad({op:'select',handles:[entity.handle]},true);await page.waitForFunction(handle=>sparkWorkspace.selection?.handle===handle,entity.handle);
  const camera=(await cad({op:'state'})).camera,box2=await page.locator('#cad-frame').boundingBox(),unit=2*camera.distance*Math.tan(camera.fov_y/2)/box2.height;
- const localX=box2.width/2+(110-camera.target[0])/unit,localY=box2.height/2-(210-camera.target[1])/unit;
+ const localX=box2.width/2+(textX+10-camera.target[0])/unit,localY=box2.height/2-(textY+10-camera.target[1])/unit;
  check(localX>=0&&localX<box2.width&&localY>=0&&localY<box2.height,'The restored annotation click lands inside the CAD viewport');
  // Slow event delivery must still honor the browser's recognized double-click.
  await page.mouse.dblclick(box2.x+localX,box2.y+localY,{delay:300});
