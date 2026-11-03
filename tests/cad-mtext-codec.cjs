@@ -20,7 +20,7 @@ async function main(){
  // rejection of ACadSharp's no-column frame fixture. Actual PH154 DWG is a
  // separate mandatory private-file check; this fixture does not replace it.
  await call({op:'open',name:'Authored MTEXT frames.dxf',data_base64:bytes.toString('base64')},true);
- const texts=await call({op:'query',type:'MText',detail:'full',limit:1000});check(texts.count===6,'Native import contains every authored control and framed MTEXT');check(texts.entities.filter(e=>e.properties.background_fill_flags===16).length===3,'Frame-only flags remain16, including the nested block text');
+ const texts=await call({op:'query',type:'MText',detail:'full',limit:1000});report.nativeTexts=texts.entities.map(e=>({handle:e.handle,value:e.value,flags:e.properties.background_fill_flags}));check(texts.count===6,'Native import contains every authored control and framed MTEXT');check(texts.entities.filter(e=>e.properties.background_fill_flags===16).length===3,'Frame-only flags remain16, including the nested block text');
  report.comparisons={};
  for(const format of ['dwg','dxf']){
   const saved=await call({op:'save',name:'mtext-frame-roundtrip.'+format,target_format:format,target_version:'AC1032'},true),result=saved.result||saved;check(!result.dropped_on_save&&typeof result.data_base64==='string','Native '+format+' export reports no dropped records');

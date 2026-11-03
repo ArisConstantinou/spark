@@ -60,6 +60,7 @@ jobs:
         with:
           name: mtext-authored-fixtures
           path: .out/mtext-frame-*.d*
+          include-hidden-files: true
           retention-days: 3
       - uses: actions/setup-node@v4
         with:
