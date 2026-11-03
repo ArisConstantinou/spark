@@ -50,7 +50,39 @@ async function definitions(){
 async function switchDocument(id){return task('Switching drawing…',async()=>{const state=await read({op:'state'});if(state.document_id===id)return;if(!state.documents.some(d=>d.id===id&&!d.start))throw Error('The drawing is no longer open.');if(project)await saveCurrent();await activate(id);bindDocument(await read({op:'state'}));localStorage.setItem('sparkworld-cad-active',project.id);});}
 async function setLayout(name){const state=await read({op:'state'});if(state.command||state.modal)throw Error('Finish the active command before changing layouts.');await mutate({op:'start',cmd:'-LAYOUT'});await mutate({op:'input',kind:'token',text:'SET'});await mutate({op:'input',kind:'text',text:name});const next=await read({op:'state'});if(next.command||next.layout!==name)throw Error('The CAD engine did not activate the requested layout.');}
 async function switchLayout(name){return task('Changing drawing layout…',async()=>{await setLayout(name);await saveCurrent();});}
-async function openProject(saved,reuse=false,progress=null){validateProject(saved,{clone:false});await reviewGraphics();await saveAll();const wantedLayout=saved.activeLayout;if(reuse){const state=await read({op:'state'}),existing=[...projects].find(([id,p])=>p.id===saved.id&&state.documents.some(d=>d.id===id&&!d.start));if(existing){await progress?.stage(2,'Switching to the open drawing','Restoring its workspace and electrical notes.');await activate(existing[0]);bindDocument(await read({op:'state'}));closePanel();localStorage.setItem('sparkworld-cad-active',project.id);return;}}await progress?.stage(1,'Opening the saved CAD drawing','Reading geometry, layers and blocks. Complex drawings can take longer.');await api().importFile(savedDrawingFile(saved),{dataBase64:saved.working.data});await reviewGraphics();await progress?.stage(2,'Restoring project settings','Restoring layout, units, circuits and electrical notes.');bindDocument(await read({op:'state'}),saved);await mutate({op:'run',cmd:'TILEMODE 1'});await compact();if(wantedLayout&&wantedLayout!=='Model')await setLayout(wantedLayout);project.savedRevision=(await read({op:'state'})).revision;project.dirty=false;closePanel();localStorage.setItem('sparkworld-cad-active',project.id);}
+async function openProject(saved,reuse=false,progress=null){
+ validateProject(saved,{clone:false});
+ await reviewGraphics();
+ await saveAll();
+ if(reuse){
+  const state=await read({op:'state'});
+  const existing=[...projects].find(([id,p])=>p.id===saved.id&&state.documents.some(d=>d.id===id&&!d.start));
+  if(existing){
+   await progress?.stage(2,'Switching to the open drawing','Restoring its workspace and electrical notes.');
+   await activate(existing[0]);
+   bindDocument(await read({op:'state'}));
+   closePanel();
+   localStorage.setItem('sparkworld-cad-active',project.id);
+   return;
+  }
+ }
+ await progress?.stage(1,'Opening the saved CAD drawing','Reading geometry, layers and blocks. Complex drawings can take longer.');
+ await api().importFile(savedDrawingFile(saved),{dataBase64:saved.working.data});
+ await reviewGraphics();
+ await progress?.stage(2,'Restoring project settings','Restoring layout, units, circuits and electrical notes.');
+ const state=await read({op:'state'});
+ bindDocument(state,saved);
+ const wantedLayout=saved.activeLayout||'Model';
+ if(state.layout!==wantedLayout){
+  if(wantedLayout==='Model')await mutate({op:'run',cmd:'TILEMODE 1'});
+  else await setLayout(wantedLayout);
+ }
+ await compact();
+ project.savedRevision=(await read({op:'state'})).revision;
+ project.dirty=false;
+ closePanel();
+ localStorage.setItem('sparkworld-cad-active',project.id);
+}
 function restoreStoredProject(id,file,alreadyRead=null){return task('Restoring project…',async progress=>{await progress.stage(0,'Reading the saved project','Retrieving the selected drawing from this device.');const saved=alreadyRead??await projectStore.get(id);if(!saved)throw Error('The saved drawing was not found.');await openProject(saved,true,progress);},{loading:file,restoring:true});}
 async function importFile(file){if(!file)return;return task('Opening '+file.name+'…',async progress=>{
  await progress.stage(0,'Reading the selected file','Cloud files may need to download before reading can finish. You can cancel this stage.');
@@ -59,7 +91,16 @@ async function importFile(file){if(!file)return;return task('Opening '+file.name
  if(!['dwg','dxf'].includes(ext))throw Error('This CAD workspace opens DWG, DXF or SparkWorld CAD project JSON.');
  const encoded=await readDrawing(file,progress.signal);await reviewGraphics();await saveAll();
  await progress.stage(1,'Opening the CAD drawing','Reading native geometry, layers and blocks. A small DWG can contain a complex drawing; this stage cannot be interrupted safely.');
- let unchanged=false;await api().importFile(file,{dataBase64:encoded,onOpened:state=>{unchanged=currentDocument(state)?.dirty===false;}});await reviewGraphics();bindDocument(await read({op:'state'}),createProject(file.name.replace(/\.[^.]+$/,'')));project.original={name:file.name,format:ext,data:encoded};await rememberSourceLayers();await mutate({op:'run',cmd:'TILEMODE 1'});await factorFromDrawing();await compact();
+ let unchanged=false;
+ await api().importFile(file,{dataBase64:encoded,onOpened:state=>{unchanged=currentDocument(state)?.dirty===false;}});
+ await reviewGraphics();
+ const opened=await read({op:'state'});
+ bindDocument(opened,createProject(file.name.replace(/\.[^.]+$/,'')));
+ project.original={name:file.name,format:ext,data:encoded};
+ await rememberSourceLayers();
+ if(opened.layout!=='Model')await mutate({op:'run',cmd:'TILEMODE 1'});
+ await factorFromDrawing();
+ await compact();
  // An untouched import is already a complete native drawing. Reuse its
  // bytes until the first edit instead of encoding a second document at peak.
  if(unchanged){const state=await read({op:'state'});project.working={...project.original};project.savedRevision=state.revision;project.activeLayout=state.layout;}
