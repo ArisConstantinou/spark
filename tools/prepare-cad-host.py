@@ -1,7 +1,8 @@
 """Prepare a pinned upstream checkout for the SparkWorld viewport host.
 
-This changes presentation only. It does not build, download dependencies, remove
-CAD entity support, overwrite a distributed component, or publish a website.
+This changes presentation and adds one atomic lazy electrical placement API.
+It does not build, download dependencies, remove CAD entity support, overwrite
+a distributed component, or publish a website.
 """
 import argparse
 import hashlib
@@ -9,8 +10,9 @@ from pathlib import Path
 import subprocess
 
 UPSTREAM = "0e77cae652271d08c7619238e619f9b6668ae17c"
-FILES = ("src/app/view/mod.rs", "src/app/control/mod.rs", "scripts/build-web-worker.sh")
+FILES = ("src/app/view/mod.rs", "src/app/control/mod.rs", "scripts/build-web-worker.sh", "src/app/control/entities.rs")
 HASHES = {'src/app/view/mod.rs': '3422aecae17991fe2340bef06c3b15fc25006bed872a69a273a939fda82a2ab8', 'src/app/control/mod.rs': '57b289fc4baf65a8fcb5eca485747cbeceabed10168889d29ab2d656048d0951', 'scripts/build-web-worker.sh': 'fc75c0ab179ea626112102e8848e2ad8f030f9bc3d0030e4e2e8bb94be6024a0'}
+HASHES['src/app/control/entities.rs'] = 'c82ad39f92c03c6e50ab32ac6f301a146999eca01d2a3eab2f7b3391a29d44a7'
 
 
 def replace_once(text, before, after):
@@ -65,6 +67,10 @@ pub(crate) fn spark_hosted_view() -> bool {
 
 
 def transform_control(text):
+    text = replace_once(text, '            "block_define" => self.control_block_define(req)?,',
+                        '            "spark_symbol_place" => self.control_spark_symbol_place(req)?,\n            "block_define" => self.control_block_define(req)?,')
+    text = replace_once(text, '            | "block_define"', '            | "spark_symbol_place"\n            | "block_define"')
+    text = replace_once(text, '"capabilities":["commands",', '"capabilities":["spark_symbol_place","commands",')
     return replace_once(text, '            "camera":({let c=tab.scene.camera.borrow();',
                         '            "hosted_view":crate::app::view::spark_hosted_view(),\n            "layouts":tab.scene.layout_names(),\n            "camera":({let c=tab.scene.camera.borrow();')
 
@@ -75,13 +81,18 @@ def transform_worker(text):
                         '  "${CARGO_TARGET_DIR:-target}/wasm32-unknown-unknown/release/ocs_web_worker.wasm"')
 
 
+def transform_entities(text):
+    addition = Path(__file__).with_name('cad-symbol-operation.rs').read_text(encoding='utf-8')
+    return replace_once(text, '    pub(super) fn control_block_define(', addition + '    pub(super) fn control_block_define(')
+
+
 def prepare(root):
     root = Path(root).resolve()
     actual = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     if actual != UPSTREAM:
         raise ValueError("The CAD source must match pinned commit " + UPSTREAM)
     changes = {}
-    for relative, transform in zip(FILES, (transform_view, transform_control, transform_worker)):
+    for relative, transform in zip(FILES, (transform_view, transform_control, transform_worker, transform_entities)):
         path = root / relative
         original = path.read_bytes()
         digest = hashlib.sha256(original).hexdigest()

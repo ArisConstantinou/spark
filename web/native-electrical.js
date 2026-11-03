@@ -7,7 +7,7 @@ const result = reply => reply.result || reply;
 const hex = value => typeof value === 'string' && /^[0-9a-f]+$/i.test(value);
 
 /** The transport must serialize mutations and reject non-ok engine replies.
- * Definitions are prepared before editing; placement itself is one native undo.
+ * Definitions and placement are committed lazily in one native undo step.
  * No existing block, source entity or layer is replaced by this adapter.
  */
 export class NativeElectrical {
@@ -38,57 +38,33 @@ export class NativeElectrical {
   return this.transport.read({...request,request_id:'sparkworld-'+crypto.randomUUID(),
    document_id:this.documentId,revision:state.revision});
  }
- async prepare(types = SYMBOLS.map(s=>s.id)) {
-  await this.state();
-  // UUID names prevent collision with unrelated source blocks. Persist the map
-  // with a project checkpoint instead of trusting a name prefix on import.
-  const pending = [...new Set(types)].filter(type=>!this.blocks.has(type)).map(type=>{
-   const symbol = SYMBOLS.find(s=>s.id===type);
-   if (!symbol) throw Error('Unknown electrical symbol: '+type);
-   const name = 'SPARKWORLD_'+type.replace(/-/g,'_')+'_'+crypto.randomUUID().replace(/-/g,'');
-   const entities = symbol.lines.map(points=>({
-    type:'LwPolyline',vertices:points.map(([x,y])=>[x,-y]),
-    layer:'0',color:0,closed:false,
-   }));
-   return {type,name,entities};
-  });
-  if (!pending.length) return [];
-  const entities = pending.flatMap(p=>p.entities);
-  const created = result(await this.mutate({op:'entities_create',entities}));
-  if (created.handles?.length !== entities.length || !created.handles.every(hex))
-   throw Error('The CAD engine did not return the electrical definition handles.');
-  const definitions = [], seeds = [];let offset = 0;
-  for (const {type,name,entities} of pending) {
-   const handles = created.handles.slice(offset,offset+entities.length);offset+=entities.length;
-   const defined = result(await this.mutate({op:'block_define',name,
-    base:[0,0,0],handles,insert_at:[0,0,0]}));
-   if (!hex(defined.insert)) throw Error('The CAD block definition could not be confirmed.');
-   seeds.push(defined.insert);
-   definitions.push({type,name});
-  }
-  // Remove only the instances made by this preparation, together. Batching
-  // these writes avoids two full-document undo snapshots for every symbol.
-  await this.mutate({op:'entities_delete',handles:seeds});
-  for (const {type,name} of definitions) this.blocks.set(type,name);
-  return definitions;
+ async prepare() {
+  const state=await this.state();
+  if(!state.capabilities?.includes('spark_symbol_place'))
+   throw Error('This CAD engine needs the current SparkWorld update before placing symbols.');
+  return [];
  }
  async place(point,{millimetresPerUnit=1,layer='SparkWorld Electrical'}={}) {
   await this.state();
-  if (!this.blocks.has(point.type)) throw Error('Prepare this electrical symbol before placement.');
+  await this.prepare();
+  const symbol=SYMBOLS.find(s=>s.id===point.type);
+  if(!symbol)throw Error('Unknown electrical symbol.');
+  const name=this.blocks.get(point.type)||'SPARKWORLD_'+point.type.replace(/-/g,'_')+'_'+crypto.randomUUID().replace(/-/g,'');
   if (![point.x,point.y,point.size,point.rotation,millimetresPerUnit].every(finite)
    || point.size<=0 || millimetresPerUnit<=0)
    throw Error('Invalid electrical position, size or drawing units.');
   if (typeof layer!=='string' || !layer.length || layer.length>200)
    throw Error('Choose a valid electrical layer.');
-  const created = result(await this.mutate({op:'entities_create',entities:[{
-   type:'Insert',block:this.blocks.get(point.type),
+  const created = result(await this.mutate({op:'spark_symbol_place',name,
+   entities:symbol.lines.map(points=>({type:'LwPolyline',vertices:points.map(([x,y])=>[x,-y]),layer:'0',color:0,closed:false})),insert:{
    position:[point.x/millimetresPerUnit,-point.y/millimetresPerUnit,0],
    scale:point.size/(32*millimetresPerUnit),rotation_deg:-point.rotation,
    layer,color:256,
-  }]}));
+  }}));
   if (created.handles?.length!==1 || !hex(created.handles[0]))
    throw Error('The CAD engine did not confirm symbol placement.');
-  return {id:point.id,type:point.type,handle:created.handles[0],block:this.blocks.get(point.type)};
+  this.blocks.set(point.type,name);
+  return {id:point.id,type:point.type,handle:created.handles[0],block:name};
  }
  async move(handles,dx,dy,{millimetresPerUnit=1}={}) {
   await this.state();
@@ -154,8 +130,11 @@ export class NativeElectrical {
   }
   const restored = new Map();
   for (const [type,name] of Object.entries(saved?.blocks||{})) {
-   if (!SYMBOLS.some(s=>s.id===type) || typeof name!=='string' || !names.has(name))
-    throw Error('The saved electrical block is missing from this drawing: '+type);
+   // A saved Undo may have removed the first placement and its definition.
+   // Keep its identity for Redo; the native operation recreates it atomically
+   // only when the next placement actually needs it.
+   if (!SYMBOLS.some(s=>s.id===type) || typeof name!=='string' || !name.startsWith('SPARKWORLD_'))
+    throw Error('Invalid saved electrical definition: '+type);
    restored.set(type,name);
   }
   this.blocks = restored;

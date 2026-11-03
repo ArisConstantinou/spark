@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/cad-host.yml'
       - 'tools/prepare-cad-host.py'
+      - 'tools/cad-symbol-operation.rs'
       - 'tools/finalize-cad-host.py'
       - 'web/**'
       - 'tests/cad-*.cjs'
