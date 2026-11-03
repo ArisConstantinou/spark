@@ -32,6 +32,18 @@ def within(source, first, last, transform):
 
 def trace_worker(source):
     def transform(body):
+        sender = "    let message_sender = sender.clone();"
+        response = "        let data = event.data();"
+        if body.count(sender) != 1 or body.count(response) != 1:
+            raise ValueError("CAD worker handoff changed")
+        body = body.replace(sender, sender + "\n    let finished_worker = worker.clone();", 1)
+        body = body.replace(
+            response,
+            "        // The message already owns its transferred buffer. Release the\n"
+            "        // completed worker before allocating the main-thread model.\n"
+            "        finished_worker.terminate();\n" + response,
+            1,
+        )
         body = mark(body, "                    let bytes = Uint8Array::new(&value).to_vec();", "copy-start")
         body = mark(body, "                    let bytes = Uint8Array::new(&value).to_vec();", "decode-start", after=True)
         body = mark(body, "                    if payload.0 != PROTOCOL_VERSION {", "decode-finished")
@@ -55,7 +67,11 @@ def trace_install(source):
     def transform(body):
         body = mark(body, "        let timings = caches.timings;", "install-start")
         body = mark(body, "        self.tabs[i].scene.warm_interaction_caches();", "interaction-start")
-        return mark(body, "        self.tabs[i].scene.warm_interaction_caches();", "interaction-finished", after=True)
+        body = mark(body, "        self.tabs[i].scene.warm_interaction_caches();", "interaction-finished", after=True)
+        body = mark(body, "        crate::io::linetypes::repair_document(&mut self.tabs[i].scene.document);", "layout-finished")
+        body = mark(body, "        self.tabs[i].scene.restore_saved_camera();", "camera-start")
+        body = mark(body, "        self.tabs[i].note_document_loaded();", "install-ready")
+        return mark(body, "        let sheet_set_task = self.sheet_set_after_open(i);", "install-finished", after=True)
 
     return within(source, "    pub(super) fn on_file_opened(", "    pub(super) fn on_web_autosave_defer(", transform)
 
