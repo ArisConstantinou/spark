@@ -1,7 +1,7 @@
 const path=require('node:path');
 module.exports=async function verifyAnnotations({page,cad,check,out}){
  await page.setViewportSize({width:1440,height:1000});
- await page.locator('#cad-tool-group-toggle').click();await page.locator('[data-cad-tab="Annotate"]').click();
+ if(await page.locator('[data-cad-tab="Annotate"]').getAttribute('aria-expanded')==='false')await page.locator('[data-cad-tab="Annotate"]').click();
  const count=(await cad({op:'query',type:'MText',limit:10000})).count;
  await page.locator('[data-cad-command="MTEXT"]').click();
  await page.waitForFunction(()=>document.querySelector('#dialog').open&&document.querySelector('#dialog-title').textContent==='Multiline text');
@@ -66,5 +66,5 @@ module.exports=async function verifyAnnotations({page,cad,check,out}){
  state=await cad({op:'state'});check(!state.text_editor&&!state.mtext_editor,'Mouse double-click opens owned Details instead of the native text window');
  await page.screenshot({path:path.join(out,'cad-doubleclick-after.png')});
  await page.locator('#dialog-close').click();
- await page.locator('#cad-tool-group-toggle').click();await page.locator('[data-cad-tab="Draw"]').click();
+ if(await page.locator('[data-cad-tab="Draw"]').getAttribute('aria-expanded')==='false')await page.locator('[data-cad-tab="Draw"]').click();
 };

@@ -1,0 +1,34 @@
+name: Verify UI Layout Lab
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ui-layouts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/ui-preferences.test.mjs
+      - name: Assemble against the current pinned CAD core
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .out/site
+          cp -a web/. .out/site/
+          python tools/prepare-locked-cad-host.py --output .out/site/app
+      - name: Browser dependencies
+        run: |
+          npm install --prefix .out/qa --no-audit --no-fund playwright@1.62.1
+          .out/qa/node_modules/.bin/playwright install --with-deps chromium
+      - name: Test all layouts, native commands and mobile preferences
+        run: node tests/run-ui-layout-lab.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-layout-verification
+          path: .out/test-results
+          retention-days: 3
