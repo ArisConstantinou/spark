@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {SYMBOLS} from './model.js';
+import {readCatalog} from './idb-catalog.js';
 const schema='sparkworld/cad-v2';let database;
 const open=()=>database||(database=new Promise((resolve,reject)=>{const r=indexedDB.open('sparkworld-cad-projects',1);r.onupgradeneeded=()=>r.result.createObjectStore('projects',{keyPath:'id'});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);}));
 async function transaction(mode,fn){const db=await open();return new Promise((resolve,reject)=>{const tx=db.transaction('projects',mode),r=fn(tx.objectStore('projects'));tx.oncomplete=()=>resolve(r.result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('Project storage was interrupted.'));});}
@@ -10,7 +11,7 @@ export function pointForEntity(project,entity){
  const point=project?.points?.[entity?.handle];
  return point&&typeof entity.block==='string'&&entity.block===project.definitions?.blocks?.[point.type]?point:null;
 }
-export function validateProject(value){
+export function validateProject(value,{clone=true}={}){
  if(!value||value.schema!==schema||typeof value.id!=='string'||typeof value.name!=='string'||value.name.length>200||!value.working||typeof value.working.data!=='string'||value.working.data.length>70*1024*1024||!['dwg','dxf'].includes(value.working.format)||!Number.isFinite(value.factor)||value.factor<=0||!Array.isArray(value.circuits)||value.circuits.length>2000||!value.points||Object.keys(value.points).length>20000||!value.routes||typeof value.definitions?.blocks!=='object')throw Error('This is not a valid SparkWorld CAD project.');
  if(value.original&&(!['dwg','dxf'].includes(value.original.format)||typeof value.original.data!=='string'||value.original.data.length>70*1024*1024))throw Error('Invalid original CAD source.');
  if(value.activeLayout!==undefined&&(typeof value.activeLayout!=='string'||value.activeLayout.length>1024))throw Error('Invalid drawing layout.');
@@ -21,6 +22,7 @@ export function validateProject(value){
  for(const [handle,p]of Object.entries(value.points)){if(!p||!/^[A-F\d]+$/i.test(handle)||!SYMBOLS.some(s=>s.id===p.type)||!text(p.label,120)||!id(p.id)||pointIds.has(p.id)||!assignment(p.circuit)||!text(p.note,2000)||!Number.isFinite(p.height)||p.height<0)throw Error('Invalid electrical point metadata.');pointIds.add(p.id);}
  if(Object.keys(value.routes).length>20000||!Object.entries(value.routes).every(([handle,r])=>/^[A-F\d]+$/i.test(handle)&&r&&id(r.id)&&assignment(r.circuit)))throw Error('Invalid circuit route metadata.');
  if(!Object.entries(value.definitions.blocks).every(([type,name])=>SYMBOLS.some(s=>s.id===type)&&text(name,255)&&name.length>0))throw Error('Invalid electrical block definitions.');
- return structuredClone(value);
+ return clone?structuredClone(value):value;
 }
-export const projectStore={save:project=>transaction('readwrite',s=>s.put(validateProject(project))),all:()=>transaction('readonly',s=>s.getAll()),get:id=>transaction('readonly',s=>s.get(id))};
+export function savedDrawingFile(project){return {name:project.working.name,size:Math.floor(project.working.data.length*3/4)-(project.working.data.endsWith('==')?2:project.working.data.endsWith('=')?1:0)};}
+export const projectStore={save:project=>transaction('readwrite',s=>s.put(validateProject(project,{clone:false}))),catalog:async()=>readCatalog(await open(),'projects',p=>p?.working&&typeof p.working.data==='string'?{id:p.id,name:p.name,updated:p.updated,file:savedDrawingFile(p)}:null),get:id=>transaction('readonly',s=>s.get(id))};

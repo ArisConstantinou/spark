@@ -113,7 +113,8 @@ export function exportSVG(d,{paper=false}={}){
  return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="${Math.round(1920*h/w)}" viewBox="${b[0]-pad} ${b[1]-pad} ${w} ${h}"><rect x="${b[0]-pad}" y="${b[1]-pad}" width="${w}" height="${h}" fill="${paper?'#fff':'#111b24'}"/><g font-family="Arial,sans-serif">${bg}${cad}${wires}${objects}${measures}</g></svg>`;
 }
 
+import {readCatalog} from './idb-catalog.js';
 let database;
 async function db(){if(database)return database;database=await new Promise((resolve,reject)=>{const r=indexedDB.open('fyp-electrical-studio',1);r.onupgradeneeded=()=>r.result.createObjectStore('drawings',{keyPath:'id'});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});return database;}
 async function transaction(mode,run){const data=await db();return new Promise((resolve,reject)=>{const tx=data.transaction('drawings',mode);const request=run(tx.objectStore('drawings'));tx.oncomplete=()=>resolve(request.result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('Storage transaction aborted'));});}
-export const storage={save:d=>transaction('readwrite',s=>s.put(structuredClone(d))),all:()=>transaction('readonly',s=>s.getAll()),get:id=>transaction('readonly',s=>s.get(id)),remove:id=>transaction('readwrite',s=>s.delete(id))};
+export const storage={save:d=>transaction('readwrite',s=>s.put(structuredClone(d))),all:()=>transaction('readonly',s=>s.getAll()),catalog:async()=>readCatalog(await db(),'drawings',p=>p?{id:p.id,name:p.name,cad:!!p.cad}:null),get:id=>transaction('readonly',s=>s.get(id)),remove:id=>transaction('readwrite',s=>s.delete(id))};
