@@ -4,6 +4,21 @@ SparkWorld is an electrical drawing workspace. Its own tools, panels and saved
 project model should use the CAD core through a stable host interface. Embedding
 the complete foreign editor is an interim integration, not the intended UI.
 
+## Canvas-first interface
+
+The main workspace owns its visible controls and uses the SparkWorld theme.
+Do not restore the permanent "Native DWG + DXF" strip or stack document tabs,
+tool categories and tool buttons into separate rows. Open drawings share the
+title bar; one compact tool row contains the group chooser, drawing tools and
+layer control. Mobile drawing options open in a themed popover without changing
+the drawing rectangle. The command field stays on one line while idle and shows
+the current native prompt and working option buttons when a command is active.
+
+Retain the permanent desktop navigation and the five mobile bottom actions.
+Provider attribution belongs in the accessible source/license information.
+Native text editors and transient dialogs still need a matching host interface
+or verified theme; preserving their behavior does not establish visual acceptance.
+
 ## Keep available in the product
 
 | Area | SparkWorld behavior | Required engine services |
@@ -33,28 +48,34 @@ splines, proxy data, text, dimensions, images or references that the user did no
 create through SparkWorld. Preserve original bytes and verify native round trips
 before removing any engine capability.
 
-## Current package evidence
+## Earlier distributed package evidence
 
-The pinned distributed component has 37 files totaling 144,949,769 bytes in the
+Before the viewport-host replacement, the pinned distributed component had 37 files totaling 144,949,769 bytes in the
 canonical component directory. Its main WASM is 89,593,544 bytes and its save
 worker WASM is 20,630,363 bytes. The rest includes fonts and supporting assets.
 These are uncompressed on-disk sizes, not measured initial network transfer or a
 percentage of code actually used. There is no measured basis for a "10% usage"
 claim or a promised bundle reduction.
 
-## Renderer host boundary still required
+## Implemented native viewport host
 
-The present component paints its ribbon, tabs, command overlay and status bar
-inside the WASM canvas. CSS cannot restyle those widgets. CLEANSCREEN hides some
-chrome but retains tabs/status/command UI and therefore does not meet the final
-single-interface requirement.
+The locally installed component omits its application ribbon, sidebar, start
+page, tabs, floating command overlay and status bar at the source level. The
+native drawing rectangle fills the iframe. No CSS clipping or fixed chrome
+insets are used for this presentation mode.
 
-A source-level viewport host should retain rendering, picking, live command
-previews, snapping, text editing, modal/loss notices and native history while
-omitting its own application chrome. It must report the actual drawing rectangle
-and document/selection/command state to the custom host. The host then owns
-toolbars, property panels, document/layout navigation and command feedback.
-Cropping the old UI or assuming fixed 32px/30px insets is not acceptance.
+SparkWorld owns the document tabs in the title bar, one compact tool row, layer
+panel, property editor, electrical library, project storage and command input.
+The default web route now opens this workspace; earlier CAD Studio bookmarks
+redirect to it. The explicit image-editor route remains available for saved
+legacy image projects.
+
+Own TEXT/MTEXT tools use the matching host form and create actual native text
+entities. The first completed audit reproduced the old engine inline and rich
+text editor. Those native editors remain reachable through other engine paths
+such as direct engine calls; replacing the main tools does not establish that
+every advanced command or native dialog has been reskinned. This remains a
+separate acceptance boundary, not permission to discard existing formatting.
 
 The source available at upstream commit
 `0e77cae652271d08c7619238e619f9b6668ae17c` renders the combined UI in
@@ -64,8 +85,10 @@ that commit, the original source hashes and every replacement anchor before
 editing the view, state bridge and worker build hook. The worker hook uses the
 same declared compiler output directory as the main build. The experimental web-only workflow compiles this
 optional presentation mode and checks the shared UI at pixel density 2.
-A modified source build is not yet verified. Retain the distributed component and pinned provenance
-until a replacement passes the same DWG and interaction checks.
+The compiled host has passed local native viewport, command/property/history,
+layout and actual-source DWG round-trip checks. Keep its exact provenance and
+the distinction between local acceptance and a deployed release. Native dialog
+surfaces, migration, performance and hosted asset identity remain release gates.
 
 ## Gates for a replacement
 
@@ -78,8 +101,9 @@ until a replacement passes the same DWG and interaction checks.
 5. Saved projects migrate without overwriting earlier drawings.
 6. The deployed asset/version identity is verified. Physical iPhone and exact
    `155-2.dwg` evidence remain separate from synthetic/headless acceptance. The
-   exact private source is now available locally; its presence is not yet
-   evidence that viewport rendering and round-trip checks have passed.
+   exact private source has passed local layer/block/type checks and native
+   export/reopen, including an independent display-geometry comparison. Those
+   results do not establish arbitrary-file fidelity or physical-device proof.
 
 This boundary does not introduce a simulator, engineering certification or a
 Windows build. Those remain outside the current web completion work.

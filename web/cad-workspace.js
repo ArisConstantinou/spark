@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// SparkWorld metadata surrounds the complete ready-made CAD editor. The native
+// SparkWorld owns the electrical workflow and controls. The native
 // document remains the authority for geometry, selection, layers and history.
 import {SYMBOLS,symbolSVG,escape as esc,storage as legacyStorage} from './model.js';
 import {NativeElectrical} from './native-electrical.js';
@@ -11,16 +11,20 @@ const projects=new Map(),adapters=new Map();let currentId,project,busy=false,pan
 const api=()=>window.sparkCadStudio;
 const read=request=>api().read(request);
 const mutate=request=>api().mutation(request);
-let serial=0,nativeControls=null,welcome=null,cadGestures=null,nativeState=null;
+let serial=0,nativeControls=null,welcome=null,cadGestures=null,nativeState=null,currentOperation=null,startupReady=false;
 let graphicsConsent=null;
 const activate=id=>read({op:'activate',document_id:id,request_id:'workspace-activate-'+ ++serial});
 function toast(message){$('#toast').textContent=message;$('#toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').hidden=true,6000);}
-function dialog(title,body,actions=[]){$('#dialog-title').textContent=title;$('#dialog-body').innerHTML=body;$('#dialog-actions').replaceChildren();for(const action of actions){const b=document.createElement('button');b.type='button';b.textContent=action.label;b.className=action.primary?'primary':'';b.onclick=()=>Promise.resolve(action.run()).then(result=>{if(result!==false)$('#dialog').close();}).catch(e=>toast(e.message));$('#dialog-actions').append(b);}if(!$('#dialog').open)$('#dialog').showModal();}
-async function task(label,fn){if(busy||cadGestures?.active)throw Error('Wait for the current drawing operation or touch gesture.');busy=true;pollSerial++;$('#studio-operation').textContent=label;$('#cad-frame').inert=true;try{return await fn();}finally{try{await poll(true);}finally{busy=false;$('#cad-frame').inert=false;}}}
+function dialog(title,body,actions=[]){$('#dialog-title').textContent=title;$('#dialog-body').innerHTML=body;$('#dialog-actions').replaceChildren();for(const action of actions){const b=document.createElement('button');b.type='button';b.textContent=action.label;b.className=action.primary?'primary':'';b.onclick=()=>Promise.resolve().then(()=>action.run()).then(result=>{if(result!==false)$('#dialog').close();}).catch(e=>toast(e.message));$('#dialog-actions').append(b);}if(!$('#dialog').open)$('#dialog').showModal();}
+async function task(label,fn,{background=false}={}){
+ const requestedDocument=currentId;if(currentOperation?.background){await currentOperation.done;if(currentId!==requestedDocument)throw Error('The drawing changed while waiting for automatic save.');}
+ if(busy||cadGestures?.active)throw Error('Wait for the current drawing operation or touch gesture.');let finish;const operation={background,done:new Promise(resolve=>finish=resolve)};currentOperation=operation;busy=true;pollSerial++;$('#studio-operation').textContent=label;$('#cad-frame').inert=true;
+ try{return await fn();}finally{try{await poll(true);}finally{busy=false;$('#cad-frame').inert=false;if(currentOperation===operation)currentOperation=null;finish();}}
+}
 const download=(value,name,mime='application/octet-stream')=>{const bytes=typeof value==='string'?new TextEncoder().encode(value):value;return api().deliver(bytes,name,mime);};
 function filename(ext){return(project?.name||'Drawing').replace(/[<>:"/\\|?*]/g,'-').slice(0,100)+'.'+ext;}
-function closePanel(){panel=null;$('#workspace-library').hidden=true;$('.studio-workspace').classList.remove('has-library');}
-function openPanel(name){panel=name;$('#workspace-library').hidden=false;$('.studio-workspace').classList.add('has-library');$('#workspace-panel-title').textContent=name;$('#workspace-search').value='';renderPanel();}
+function closePanel(){nativeControls?.cancelPlacement();panel=null;$('#workspace-library').hidden=true;$('.studio-workspace').classList.remove('has-library');}
+function openPanel(name){nativeControls?.cancelPlacement();panel=name;$('#workspace-library').hidden=false;$('.studio-workspace').classList.add('has-library');$('#workspace-panel-title').textContent=name;$('#workspace-search').value='';renderPanel();}
 const currentDocument=state=>state.documents?.find(d=>d.id===state.document_id&&!d.start);
 async function reviewGraphics(){const state=await read({op:'state'});if(!state.modal)return;const signature=JSON.stringify(state.modal);if(!/GpuWarning/.test(signature))throw Error('Review the notice inside the CAD editor before continuing.');if(graphicsConsent!==signature){const accepted=await new Promise(resolve=>{dialog('CAD graphics notice','<p class="dialog-copy">The CAD engine is using software graphics. Large drawings may be slower on this browser.</p>',[{label:'Cancel',run:()=>resolve(false)},{label:'Continue with software rendering',primary:true,run:()=>resolve(true)}]);$('#dialog').addEventListener('close',()=>resolve(false),{once:true});});if(!accepted)throw Error('CAD operation cancelled.');graphicsConsent=signature;}await mutate({op:'action',name:'close_modal'});}
 function bindDocument(state,metadata=null){const d=currentDocument(state);if(!d){currentId=null;project=null;return null;}const changed=currentId!==d.id;currentId=d.id;project=metadata||projects.get(d.id)||createProject(d.title||'Untitled drawing');projects.set(d.id,project);if(changed)activeCircuit=project.activeCircuit||project.circuits[0]?.id||'';return project;}
@@ -56,7 +60,7 @@ async function definitions(){
 async function switchDocument(id){return task('Switching drawing…',async()=>{const state=await read({op:'state'});if(state.document_id===id)return;if(!state.documents.some(d=>d.id===id&&!d.start))throw Error('The drawing is no longer open.');if(project)await saveCurrent();await activate(id);bindDocument(await read({op:'state'}));localStorage.setItem('sparkworld-cad-active',project.id);});}
 async function setLayout(name){const state=await read({op:'state'});if(state.command||state.modal)throw Error('Finish the active command before changing layouts.');await mutate({op:'start',cmd:'-LAYOUT'});await mutate({op:'input',kind:'token',text:'SET'});await mutate({op:'input',kind:'text',text:name});const next=await read({op:'state'});if(next.command||next.layout!==name)throw Error('The CAD engine did not activate the requested layout.');}
 async function switchLayout(name){return task('Changing drawing layout…',async()=>{await setLayout(name);await saveCurrent();});}
-async function openProject(saved,reuse=false){await reviewGraphics();await saveAll();const wantedLayout=saved.activeLayout;if(reuse){const state=await read({op:'state'}),existing=[...projects].find(([id,p])=>p.id===saved.id&&state.documents.some(d=>d.id===id&&!d.start));if(existing){await activate(existing[0]);bindDocument(await read({op:'state'}));closePanel();localStorage.setItem('sparkworld-cad-active',project.id);return;}}await api().importFile(new File([Uint8Array.from(atob(saved.working.data),c=>c.charCodeAt(0))],saved.working.name));await reviewGraphics();bindDocument(await read({op:'state'}),validateProject(saved));await mutate({op:'run',cmd:'TILEMODE 1'});await compact();await definitions();if(wantedLayout&&wantedLayout!=='Model')await setLayout(wantedLayout);closePanel();localStorage.setItem('sparkworld-cad-active',project.id);}
+async function openProject(saved,reuse=false){await reviewGraphics();await saveAll();const wantedLayout=saved.activeLayout;if(reuse){const state=await read({op:'state'}),existing=[...projects].find(([id,p])=>p.id===saved.id&&state.documents.some(d=>d.id===id&&!d.start));if(existing){await activate(existing[0]);bindDocument(await read({op:'state'}));closePanel();localStorage.setItem('sparkworld-cad-active',project.id);return;}}await api().importFile(new File([Uint8Array.from(atob(saved.working.data),c=>c.charCodeAt(0))],saved.working.name));await reviewGraphics();bindDocument(await read({op:'state'}),validateProject(saved));await mutate({op:'run',cmd:'TILEMODE 1'});await compact();await definitions();if(wantedLayout&&wantedLayout!=='Model')await setLayout(wantedLayout);project.savedRevision=(await read({op:'state'})).revision;project.dirty=false;closePanel();localStorage.setItem('sparkworld-cad-active',project.id);}
 async function importFile(file){if(!file)return;return task('Opening '+file.name+'…',async()=>{
  const ext=file.name.split('.').at(-1).toLowerCase();if(file.size>(ext==='json'?128:48)*1024*1024)throw Error('The selected file exceeds the supported import size.');await reviewGraphics();
  if(ext==='json'){const imported=validateProject(JSON.parse(await file.text()));imported.importedFrom=imported.id;imported.id=crypto.randomUUID();await openProject(imported);await saveCurrent();return;}
@@ -121,10 +125,10 @@ async function poll(force=false){if(((busy||cadGestures?.active)&&!force)||!api(
  const key=state.document_id+'|'+state.revision+'|'+state.selection_revision+'|'+state.selection.join(',');if(key!==lastSelection){const picked=state.selection[0]?(await read({op:'query',handles:[state.selection[0]],detail:'geometry'})).entities[0]:null;if(epoch!==pollSerial)return;lastSelection=key;selection=picked;$('#point-summary').hidden=!selection;if(selection)$('#point-summary-label').textContent=pointForEntity(project,selection)?.label||selection.display_type||selection.type;}
  const revisionKey=state.document_id+':'+state.revision;
  if(lastRevision!==revisionKey){lastRevision=revisionKey;project.dirty=project.savedRevision!==state.revision;clearTimeout(saveTimer);saveTimer=null;}
- if(project.dirty&&!state.command&&!state.modal&&!saveTimer){const captured=project,id=state.document_id;saveTimer=setTimeout(()=>{saveTimer=null;if(!busy&&captured.dirty&&project===captured&&currentId===id)task('Saving complete project…',saveCurrent).catch(error=>toast('Automatic save failed: '+error.message));},2200);}
+ if(project.dirty&&!state.command&&!state.modal&&!saveTimer){const captured=project,id=state.document_id;saveTimer=setTimeout(()=>{saveTimer=null;if(!busy&&!cadGestures?.active&&captured.dirty&&project===captured&&currentId===id)task('Saving complete project…',saveCurrent,{background:true}).catch(error=>toast('Automatic save failed: '+error.message));},2200);}
 }
 
-document.body.classList.add('cad-workspace-page');$('.studio-heading>strong').textContent='Draw';$('#electrical-nav').lastChild.textContent='Projects';$('#cad-nav').lastChild.textContent='Draw';
+document.body.classList.add('cad-workspace-page');$('#cad-frame').title='SparkWorld drawing canvas';$('.studio-heading>strong').textContent='Draw';$('#electrical-nav').innerHTML='<svg viewBox="0 0 24 24"><path d="M3 7h7l2 3h9v10H3zM3 10V5h7l2 2"/></svg>Projects';$('#cad-nav').lastChild.textContent='Draw';
 const rail=$('.studio-rail'),symbolButton=$('#fit'),circuitButton=$('#history-menu'),moreButton=$('#studio-info');symbolButton.innerHTML='<svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>Symbols';circuitButton.innerHTML='<svg viewBox="0 0 24 24"><path d="M3 3h6v6H3zM15 15h6v6h-6zM6 9v9h9M9 6h9v9"/></svg>Circuits';moreButton.innerHTML='<svg viewBox="0 0 24 24"><circle cx="4" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="20" cy="12" r="1"/></svg>More';
 const library=document.createElement('aside');library.id='workspace-library';library.className='cad-workspace-library';library.hidden=true;library.innerHTML='<div class="panel-title"><h2 id="workspace-panel-title">Symbols</h2><button id="workspace-panel-close" class="icon-button" aria-label="Close panel">×</button></div><label class="search"><input id="workspace-search" type="search" aria-label="Search workspace panel" placeholder="Search…"></label><div id="workspace-panel-body" class="library-scroll"></div>';rail.after(library);
 const placement=document.createElement('div');placement.id='electrical-placement';placement.className='electrical-placement';placement.hidden=true;placement.tabIndex=0;placement.setAttribute('aria-label','Tap to place the selected electrical symbol');$('.studio-frame-wrap').append(placement);
@@ -140,14 +144,28 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){chosen=null;placeme
 while(!api())await delay(50);while(api().busy)await delay(50);await poll();
 // Native Open/Drop and Ctrl+S use the same project boundary as the parent UI.
 // Font and other non-CAD file inputs continue to the native editor unchanged.
-nativeControls=await mountCadControls({read,write:mutate,task,save:saveCurrent,dialog,toast,frame:$('#cad-frame'),compact,switchDocument,switchLayout});
+nativeControls=await mountCadControls({read,write:mutate,task,save:saveCurrent,dialog,toast,frame:$('#cad-frame'),compact,switchDocument,switchLayout,describeDocument:d=>{const p=projects.get(d.id);return{displayName:p?.name||d.path?.split(/[\\/]/).at(-1)||d.title,dirty:!p||p.dirty||p.savedRevision!==d.revision};}});
 const inner=$('#cad-frame').contentWindow;
+// A deliberate mouse double-click opens the host's Details, rather than the
+// engine's separate rich-text/property window. A normal click only selects.
+let lastCanvasPress=null,suppressDoubleRelease=false;
+window.addEventListener('pointerup',()=>suppressDoubleRelease=false,true);
+inner.addEventListener('pointercancel',()=>{lastCanvasPress=null;suppressDoubleRelease=false;},true);
+inner.addEventListener('pointerdown',event=>{
+ if(event.pointerType!=='mouse'||event.button!==0||event.target?.tagName!=='CANVAS'||busy||nativeState?.command||nativeState?.modal||nativeState?.text_editor||nativeState?.mtext_editor)return;
+ const previous=lastCanvasPress;lastCanvasPress={time:event.timeStamp,x:event.clientX,y:event.clientY};
+ if(previous&&event.timeStamp-previous.time<400&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<6&&nativeState?.selection?.length){
+  lastCanvasPress=null;suppressDoubleRelease=true;event.preventDefault();event.stopImmediatePropagation();poll(true).then(details).catch(error=>toast(error.message));
+ }
+},true);
+inner.addEventListener('pointerup',event=>{if(suppressDoubleRelease&&event.pointerType==='mouse'&&event.button===0){suppressDoubleRelease=false;event.preventDefault();event.stopImmediatePropagation();}},true);
+inner.addEventListener('dblclick',event=>{if(event.target?.tagName==='CANVAS'){event.preventDefault();event.stopImmediatePropagation();}},true);
 cadGestures=installCadGestures({inner,enabled:()=>!!nativeState?.hosted_view&&!!project&&!busy&&!nativeState.command&&!nativeState.modal&&!nativeState.block_editor,read,write:mutate,onError:error=>toast(error.message),onFinish:()=>poll(true)});
 inner.onbeforeunload=null;
 api().setPresentation({name:state=>projects.get(state?.document_id)?.name,dirty:state=>!!state?.documents?.some(doc=>!doc.start&&(!projects.has(doc.id)||projects.get(doc.id).dirty||projects.get(doc.id).savedRevision!==doc.revision)),status:state=>{const p=projects.get(state?.document_id);return p?(p.dirty||p.savedRevision!==state.revision?'Unsaved project changes':'Complete project saved on this device'):null;}});
 inner.document.addEventListener('change',event=>{const file=event.target?.files?.[0];if(file&&/\.(dwg|dxf)$/i.test(file.name)){event.stopImmediatePropagation();event.preventDefault();event.target.value='';importFile(file).catch(e=>toast(e.message));}},true);
 inner.document.addEventListener('drop',event=>{const file=event.dataTransfer?.files?.[0];if(file&&/\.(dwg|dxf)$/i.test(file.name)){event.stopImmediatePropagation();event.preventDefault();importFile(file).catch(e=>toast(e.message));}},true);
 inner.document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();event.stopImmediatePropagation();task('Saving complete project…',saveAll).catch(e=>toast(e.message));}},true);
-window.sparkWorkspace={read,mutate,importFile,newDrawing,beginPlacement,save:()=>task('Saving complete project…',saveAll),get project(){return project?structuredClone(project):null;},get busy(){return busy||!!cadGestures?.active;},get touchActive(){return!!cadGestures?.active;},get selection(){return selection;}};
-try{const id=localStorage.getItem('sparkworld-cad-active'),saved=id?await projectStore.get(id):null;if(saved)await task('Restoring the last complete project…',()=>openProject(saved));}catch(error){toast('The last CAD project could not be restored: '+error.message);}
+window.sparkWorkspace={read,mutate,importFile,newDrawing,beginPlacement,save:()=>task('Saving complete project…',saveAll),get project(){return project?structuredClone(project):null;},get busy(){return busy||!!cadGestures?.active;},get ready(){return startupReady;},get touchActive(){return!!cadGestures?.active;},get selection(){return selection;}};
+try{const id=localStorage.getItem('sparkworld-cad-active'),saved=id?await projectStore.get(id):null;if(saved)await task('Restoring the last complete project…',()=>openProject(saved));}catch(error){toast('The last CAD project could not be restored: '+error.message);}finally{startupReady=true;}
 setInterval(()=>poll().catch(e=>toast(e.message)),750);

@@ -1,4 +1,4 @@
-// Acceptance on the assembled main page and the distributed, unmodified CAD engine.
+// Acceptance on the assembled main page and the pinned native CAD component.
 const fs=require('node:fs/promises'),path=require('node:path');
 module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,check}){
  const report={errors:[],external:[]};let page,context;
@@ -20,7 +20,7 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  check(Object.keys(initial.definitions.blocks).length===13,'All electrical library definitions are prepared inside the main CAD document');
  check((await cad({op:'state'})).documents.filter(d=>!d.start).length===1,'Only one working native drawing remains after library preparation');
  check(await page.locator('.studio-rail button').count()===5,'Main workspace has five primary actions');
- check(page.url().includes('?workspace=cad')&&await page.locator('#cad-frame').count()===1,'Complete ready-made editor runs on the main page');
+ check(page.url().includes('?workspace=cad')&&await page.locator('#cad-frame').count()===1,'One native CAD viewport runs inside the owned main workspace');
  await page.locator('#workspace-layers').click();await page.locator('#native-show-all').click();await page.waitForFunction(()=>!sparkWorkspace.busy);
  const allLayers=await cad({op:'records',collection:'layers',limit:10000});check(allLayers.records.every(r=>!r.properties.flags.off&&!r.properties.flags.frozen),'Reveal all unfreezes both parent and child block layers');
  await page.locator('#native-source-state').click();await page.waitForFunction(()=>!sparkWorkspace.busy);const restoredLayers=await cad({op:'records',collection:'layers',limit:10000});check(restoredLayers.records.some(r=>r.properties.flags.off)&&restoredLayers.records.some(r=>r.properties.flags.frozen),'Source state restores the original off and frozen layer flags');
@@ -44,6 +44,7 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  await page.screenshot({path:path.join(out,'cad-workspace-desktop.png')});
  await page.reload();await ready();
  check((await page.evaluate(()=>Object.values(sparkWorkspace.project.points)[0].note)).includes('Κουζίνα'),'Reload restores CAD geometry and electrical notes from one project');
+ check(await page.evaluate(async()=>!sparkWorkspace.project.dirty&&sparkWorkspace.project.savedRevision===(await sparkWorkspace.read({op:'state'})).revision),'An untouched restored project has a clean saved state');
  const reopened=(await cad({op:'query',handles:[point.handle],detail:'geometry'})).entities[0];check(reopened.position[0]===entity.position[0]+25&&reopened.position[1]===entity.position[1]+40,'Native movement survives complete-project save and reload');
  if(process.env.SPARK_HOSTED_RENDERER==='1'){
  const state=await cad({op:'state'}),bounds=await page.locator('#cad-frame').boundingBox();check(state.hosted_view===true,'The compiled engine exposes the real viewport host mode');check(Math.abs(state.viewport_size[0]-bounds.width)<2&&Math.abs(state.viewport_size[1]-bounds.height)<2,'Native viewport fills the iframe without foreign chrome or cropping');
@@ -62,6 +63,7 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(700);await page.locator('#fit').click();await page.screenshot({path:path.join(out,'cad-workspace-mobile.png')});
  const bounds=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,nav:[...document.querySelectorAll('.studio-rail button')].map(b=>b.getBoundingClientRect().toJSON())}));check(!bounds.overflow&&bounds.nav.every(b=>b.height>=44&&b.x>=0&&b.right<=390),'Mobile has five usable bottom actions without page overflow');
  await require('./cad-own-controls.cjs')({page,cad,check,out});
+ await require('./cad-annotations.cjs')({page,cad,check,out});
  check(report.errors.length===0,'No unhandled browser errors');check(report.external.length===0,'No external requests or drawing uploads');report.status='PASS';
  }catch(error){
   const diagnostic=await page?.evaluate(async()=>{const s=await window.sparkWorkspace?.read({op:'state'});return{url:location.href,operation:document.querySelector('#studio-operation')?.textContent,toast:document.querySelector('#toast')?.textContent,layout:s?.layout,command:s?.command,modal:s?.modal,hosted:s?.hosted_view};}).catch(()=>null);
