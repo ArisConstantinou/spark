@@ -9,6 +9,8 @@ SOURCES = {
     "src/io/web_worker.rs": "35afc2f7a151c5b66b1ccff130548a27e4c8345e0cd2b56378174b6fd496861f",
     "src/io/mod.rs": "032f5690bdc495750e3600b26751518932d172921284afd4ed8496a8324edde9",
     "src/app/update/file.rs": "c73d5dd5bb86ae0b16248c7c6c333e2dfcdd4927982a5489e6a3e37b588db687",
+    "src/scene/mod.rs": "02c4ad573512ba3196b456933976de8adfe4e923882f2ab8964636a9a7ce684b",
+    "src/scene/view/viewport_pane.rs": "c000e4d49d8a56542bb45f5de6c24032178d092b5515c7ce54ea5074ec00f798",
 }
 
 
@@ -64,9 +66,58 @@ def trace_install(source):
     return within(source, "    pub(super) fn on_file_opened(", "    pub(super) fn on_web_autosave_defer(", transform)
 
 
+def mark_large_frame(source, anchor, phase, scene):
+    if source.count(anchor) != 1:
+        raise ValueError(f"CAD render trace anchor changed: {phase}")
+    indent = anchor[: len(anchor) - len(anchor.lstrip())]
+    lines = [
+        '#[cfg(target_arch = "wasm32")]',
+        "{",
+        "    use std::sync::atomic::{AtomicBool, Ordering};",
+        "    static LOGGED: AtomicBool = AtomicBool::new(false);",
+        f"    if !LOGGED.load(Ordering::Relaxed) && {scene}.document.entity_count() >= 10_000",
+        "        && !LOGGED.swap(true, Ordering::Relaxed)",
+        "    {",
+        f'        web_sys::console::debug_1(&"SPARK_OPEN_TRACE {phase}".into());',
+        "    }",
+        "}",
+    ]
+    return source.replace(anchor, "\n".join(indent + line for line in lines) + "\n" + anchor, 1)
+
+
+def trace_resident_geometry(source):
+    def transform(body):
+        for anchor, phase in (
+            ("        let mut wires = self.wires_for_block_culled(", "resident-tessellation-start"),
+            ("        for _ in 0..3 {", "resident-first-pass-finished"),
+            ("            wires = self.wires_for_block_culled(", "resident-atlas-rebuild"),
+            ("        self.building_resident_set.set(false);", "resident-tessellation-finished"),
+            ("        let layout = Self::resident_wire_layout(&wires);", "resident-layout-start"),
+            ("        let arc = Arc::new(wires);", "resident-layout-finished"),
+        ):
+            body = mark_large_frame(body, anchor, phase, "self")
+        return body
+
+    return within(source, "    fn resident_wires_for(", "    fn resident_wire_key(", transform)
+
+
+def trace_viewport(source):
+    def transform(body):
+        body = mark_large_frame(body, "        match self.pane {", "viewport-primitive-start", "self.scene")
+        body = body.replace("        match self.pane {", "        let primitive = match self.pane {", 1)
+        end = "\n        }\n    }\n\n"
+        if not body.endswith(end):
+            raise ValueError("CAD viewport draw return changed")
+        body = body[:-len(end)] + "\n        };\n        primitive\n    }\n\n"
+        return mark_large_frame(body, "        primitive\n", "viewport-primitive-finished", "self.scene")
+
+    return within(source, "    fn draw(", "    fn update(", transform)
+
+
 def prepare(root):
     changes = {}
-    for (relative, digest), transform in zip(SOURCES.items(), (trace_worker, trace_load, trace_install)):
+    transforms = (trace_worker, trace_load, trace_install, trace_resident_geometry, trace_viewport)
+    for (relative, digest), transform in zip(SOURCES.items(), transforms, strict=True):
         path = root / relative
         raw = path.read_bytes()
         if hashlib.sha256(raw).hexdigest() != digest:
