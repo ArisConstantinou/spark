@@ -2,6 +2,7 @@ using ACadSharp;
 using ACadSharp.Entities;
 using ACadSharp.IO;
 using ACadSharp.Tables;
+using ACadSharp.XData;
 using CSMath;
 using System.Text.Json;
 
@@ -19,10 +20,17 @@ static class MTextFrameFixture {
    }
    doc.Entities.Add(Text("Control Ω",0,0));doc.Entities.Add(Text("Frame Θ1",16,30));
    doc.Entities.Add(Text("Columns Θ2",16,60,true));doc.Entities.Add(Text("Fill control",1,90));doc.Entities.Add(Text("Frame and fill",17,120,true));
+   var app=new AppId("AcadAnnotative");doc.AppIds.Add(app);
+   foreach(bool enabled in new[]{true,false}){
+    var annotated=Text(enabled?"Annotation enabled":"Annotation disabled",0,enabled?180:210);
+    annotated.IsAnnotative=enabled;
+    annotated.ExtendedData.Add(app,new ExtendedDataRecord[]{new ExtendedDataString("AnnotativeData"),new ExtendedDataControlString(true),new ExtendedDataInteger16(1),new ExtendedDataInteger16((short)(enabled?1:0)),new ExtendedDataControlString(false)});
+    doc.Entities.Add(annotated);
+   }
    var block=new BlockRecord("FRAMED_TEXT_BLOCK");block.Entities.Add(Text("Nested Θ4",16,0,true));doc.Entities.Add(new Insert(block){InsertPoint=new XYZ(150,20,0)});
    if(Path.GetExtension(args[1]).Equals(".dxf",StringComparison.OrdinalIgnoreCase)){using var bytes=new MemoryStream();using(var writer=new DxfWriter(bytes,doc,false))writer.Write();File.WriteAllBytes(args[1],PreserveAuthoredFlags(bytes.ToArray(),doc));}
    else{using(var writer=new DwgWriter(args[1],doc))writer.Write();}
-   var rows=Rows(Read(args[1]));if(rows.Length!=6||rows.Count(e=>e.Flags==16)!=3||rows.Count(e=>e.Flags==17)!=1)throw new Exception("Authored fixture omitted text-frame flags.");
+   var rows=Rows(Read(args[1]));if(rows.Length!=8||rows.Count(e=>e.Flags==16)!=3||rows.Count(e=>e.Flags==17)!=1)throw new Exception("Authored fixture omitted text-frame flags.");
    Console.WriteLine(JsonSerializer.Serialize(new{status="PASS",fixture="authored MTEXT frames",count=rows.Length,frameOnly=rows.Count(e=>e.Flags==16)}));return true;
   }
   if(args.Length==3&&args[0]=="--mtext-compare") {

@@ -20,17 +20,19 @@ async function main(){
  // rejection of ACadSharp's no-column frame fixture. Actual PH154 DWG is a
  // separate mandatory private-file check; this fixture does not replace it.
  await call({op:'open',name:'Authored MTEXT frames.dxf',data_base64:bytes.toString('base64')},true);
- const texts=await call({op:'query',type:'MText',detail:'full',limit:1000});report.nativeTexts=texts.entities.map(e=>({handle:e.handle,value:e.value,flags:e.properties.background_fill_flags}));check(texts.count===6,'Native import contains every authored control and framed MTEXT');check(texts.entities.filter(e=>e.properties.background_fill_flags===16).length===3,'Frame-only flags remain16, including the nested block text');
+ const texts=await call({op:'query',type:'MText',detail:'full',limit:1000});report.nativeTexts=texts.entities.map(e=>({handle:e.handle,value:e.value,flags:e.properties.background_fill_flags}));check(texts.count===8,'Native import contains every authored control and framed MTEXT');check(texts.entities.filter(e=>e.properties.background_fill_flags===16).length===3,'Frame-only flags remain16, including the nested block text');
+ const annotationState=entities=>entities.find(e=>e.value==='Annotation enabled')?.properties.is_annotative===true&&entities.filter(e=>e.value!=='Annotation enabled').every(e=>e.properties.is_annotative===false);
+ check(beforeMode?!annotationState(texts.entities):annotationState(texts.entities),beforeMode?'Released DXF reader reproduces the missing explicit annotative state':'DXF import honours enabled and disabled AcadAnnotative data');
  report.comparisons={};
  for(const format of ['dwg','dxf']){
   const saved=await call({op:'save',name:'mtext-frame-roundtrip.'+format,target_format:format,target_version:'AC1032'},true),result=saved.result||saved;check(!result.dropped_on_save&&typeof result.data_base64==='string','Native '+format+' export reports no dropped records');
   const file=path.join(out,'mtext-frame-roundtrip.'+format);await fs.writeFile(file,Buffer.from(result.data_base64,'base64'));
   const value=execFileSync('dotnet',['run','--no-build','--project','cad-tests/SparkWorld.CadTests.csproj','-c','Release','--','--mtext-compare',fixture,file],{encoding:'utf8'});report.comparisons[format]=JSON.parse(value);
-  if(!beforeMode&&format==='dwg'){await call({op:'open',name:'Reopened authored frames.dwg',data_base64:result.data_base64},true);check((await call({op:'query',type:'MText',limit:1})).count===6,'The corrected DWG also reopens in the native browser engine');}
+  if(!beforeMode){await call({op:'open',name:'Reopened authored frames.'+format,data_base64:result.data_base64},true);const reopened=await call({op:'query',type:'MText',detail:'full',limit:1000});check(reopened.count===8,'All corrected '+format+' texts reopen in the native browser engine');check(annotationState(reopened.entities),'Native '+format+' reopen preserves enabled and disabled annotation states');}
  }
- const {dwg,dxf}=report.comparisons;check(dxf.status==='PASS'&&dxf.before===6&&dxf.after===6,'Independent decoder retains every DXF text, flag, owner and checked geometric field');
+ const {dwg,dxf}=report.comparisons;check(dxf.status==='PASS'&&dxf.before===8&&dxf.after===8,'Independent decoder retains every DXF text, flag, owner and checked geometric field');
  if(beforeMode){check(dwg.status==='FAIL'&&dwg.missing.length+dwg.changed.length>0&&[...dwg.missing,...dwg.changed].every(e=>e.Flags===16)&&!dwg.extra.length,'Released core reproduces only the expected frame-only DWG loss or field misalignment');report.status='EXPECTED_FRAME_FAILURE';}
- else{check(dwg.status==='PASS'&&dwg.before===6&&dwg.after===6,'Independent DWG reopen retains all framed texts without changing controls or flags');report.status='PASS';}
+ else{check(dwg.status==='PASS'&&dwg.before===8&&dwg.after===8,'Independent DWG reopen retains all framed texts without changing controls or flags');report.status='PASS';}
  check(crypto.createHash('sha256').update(await fs.readFile(fixture)).digest('hex')===sourceHash,'Original authored source remains unchanged');check(!report.errors.length&&!report.external.length,'No browser errors, external requests or drawing uploads');report.serverLog=log;
 }
 main().catch(error=>{report.status='FAIL';report.failure=error.stack;process.exitCode=1;}).finally(async()=>{await context?.close();await browser?.close();if(server&&server.exitCode===null){server.kill();await new Promise(r=>server.once('exit',r));}await fs.writeFile(path.join(out,'mtext-frame-'+report.phase+'.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));});

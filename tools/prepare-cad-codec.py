@@ -13,10 +13,12 @@ import subprocess
 HOST = '0e77cae652271d08c7619238e619f9b6668ae17c'
 CODEC = '53e6420c4df4d207409798c2719d32fc6cf2811d'
 WRITER = 'src/io/dwg/dwg_stream_writers/object_writer/entities.rs'
+READER = 'src/io/dxf/reader/section_reader.rs'
 HASHES = {
     'Cargo.toml': '43e53784a8b0a0ef8604b39a7c291fcbcbc7ed86f1f057d6f2f82cc51cac93f5',
     'Cargo.lock': 'f68075c843019e41247cf42314bb16a50d2f8e601ca45b5ed0791c7b2ff8cd2c',
     WRITER: 'b3c1f5c64400a5414ef22c9e921e25698b34154d78212544a27f9444b49cb522',
+    READER: '811bdf843eb491be0193564ba1c1bd3ba84e0fb6fb5ddf7dba30d6e376a180c6',
 }
 
 
@@ -40,6 +42,23 @@ def transform_writer(text):
         '            {')
 
 
+def transform_reader(text):
+    # DXF has no inline MTEXT annotative bit. Preserve its explicit XDATA
+    # association instead of leaving the default false after every DXF read.
+    if 'mtext.is_annotative = record.values.iter()' in text:
+        raise ValueError('MTEXT annotation reader already patched')
+    return once(text,
+        '        Ok(Some(mtext))\n    }',
+        '        if let Some(record) = mtext.common.extended_data.get_record("AcadAnnotative") {\n'
+        '            use crate::xdata::XDataValue;\n'
+        '            mtext.is_annotative = record.values.iter().filter_map(|value| match value {\n'
+        '                XDataValue::Integer16(flag) => Some(*flag),\n'
+        '                _ => None,\n'
+        '            }).last() == Some(1);\n'
+        '        }\n\n'
+        '        Ok(Some(mtext))\n    }')
+
+
 def prepare(host, codec):
     host, codec = Path(host).resolve(), Path(codec).resolve()
     if host.parent != codec.parent or codec.name != 'cad-codec-source':
@@ -49,7 +68,7 @@ def prepare(host, codec):
         if actual != expected:
             raise ValueError('Unexpected CAD revision: ' + actual)
     originals = {}
-    for root, relative in ((host, 'Cargo.toml'), (host, 'Cargo.lock'), (codec, WRITER)):
+    for root, relative in ((host, 'Cargo.toml'), (host, 'Cargo.lock'), (codec, WRITER), (codec, READER)):
         data = (root / relative).read_bytes()
         if hashlib.sha256(data).hexdigest() != HASHES[relative]:
             raise ValueError('Changed or unreviewed source: ' + relative)
@@ -67,7 +86,8 @@ def prepare(host, codec):
     updated = once(old, source, '')
     changes = {host / 'Cargo.toml': manifest,
                host / 'Cargo.lock': once(lock, old, updated),
-               codec / WRITER: transform_writer(originals[codec / WRITER])}
+               codec / WRITER: transform_writer(originals[codec / WRITER]),
+               codec / READER: transform_reader(originals[codec / READER])}
     # Validate every revision/hash/anchor before editing any source.
     for file, text in changes.items():
         file.write_text(text, encoding='utf-8', newline='\n')

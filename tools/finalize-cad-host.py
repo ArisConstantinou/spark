@@ -39,19 +39,22 @@ if args.codec_source:
     if codec_revision != "53e6420c4df4d207409798c2719d32fc6cf2811d":
         raise ValueError("Unreviewed codec source")
     writer = "src/io/dwg/dwg_stream_writers/object_writer/entities.rs"
+    reader = "src/io/dxf/reader/section_reader.rs"
     changed = subprocess.check_output(["git", "diff", "--name-only"], cwd=codec, text=True).splitlines()
-    if changed != [writer]:
+    if sorted(changed) != sorted([writer, reader]):
         raise ValueError("Unexpected codec modifications")
-    codec_patch = subprocess.check_output(["git", "diff", "--", writer], cwd=codec)
+    codec_patch = subprocess.check_output(["git", "diff", "--", writer, reader], cwd=codec)
     (output / "SPARKWORLD-CODEC.patch").write_bytes(codec_patch)
     (output / "acadrust-source").mkdir(exist_ok=True)
     shutil.copyfile(codec / writer, output / "acadrust-source" / "entities.rs")
+    shutil.copyfile(codec / reader, output / "acadrust-source" / "section_reader.rs")
     shutil.copyfile(codec / "LICENSE", output / "LICENSE-acadrust-MPL-2.0.txt")
     (output / "acadrust-source" / "README.txt").write_text(
         "Modified Source Code Form, MPL-2.0. Original source and all other files:\n"
         "https://github.com/HakanSeven12/acadrust/tree/" + codec_revision + "\n"
-        "Modified file: " + writer + "\n"
+        "Modified files: " + writer + "; " + reader + "\n"
         "SparkWorld change: emit the background fields required by R2018 MTEXT text-frame flags.\n"
+        "Read MTEXT annotativeness from its retained AcadAnnotative DXF XDATA.\n"
         "Reproduce using tools/prepare-cad-codec.py and .github/workflows/cad-host.yml in the integration commit.\n",
         encoding="utf-8")
     codec_metadata = {"codec_upstream_commit": codec_revision,
