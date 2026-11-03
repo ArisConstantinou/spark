@@ -60,8 +60,9 @@ The source available at upstream commit
 `0e77cae652271d08c7619238e619f9b6668ae17c` renders the combined UI in
 `src/app/view/mod.rs::view_main`; its workspace, floating command line and outer
 chrome are distinct construction sections. `tools/prepare-cad-host.py` validates
-that commit, both original source hashes and every replacement anchor before
-editing either source file. The experimental web-only workflow compiles this
+that commit, the original source hashes and every replacement anchor before
+editing the view, state bridge and worker build hook. The worker hook uses the
+same declared compiler output directory as the main build. The experimental web-only workflow compiles this
 optional presentation mode and checks the shared UI at pixel density 2.
 A modified source build is not yet verified. Retain the distributed component and pinned provenance
 until a replacement passes the same DWG and interaction checks.
@@ -76,7 +77,9 @@ until a replacement passes the same DWG and interaction checks.
    checks pass; unsupported external/font content remains disclosed.
 5. Saved projects migrate without overwriting earlier drawings.
 6. The deployed asset/version identity is verified. Physical iPhone and exact
-   `155-2.dwg` evidence remain separate from synthetic/headless acceptance.
+   `155-2.dwg` evidence remain separate from synthetic/headless acceptance. The
+   exact private source is now available locally; its presence is not yet
+   evidence that viewport rendering and round-trip checks have passed.
 
 This boundary does not introduce a simulator, engineering certification or a
 Windows build. Those remain outside the current web completion work.

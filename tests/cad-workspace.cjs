@@ -44,7 +44,14 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  check((await page.evaluate(()=>Object.values(sparkWorkspace.project.points)[0].note)).includes('Κουζίνα'),'Reload restores CAD geometry and electrical notes from one project');
  const reopened=(await cad({op:'query',handles:[point.handle],detail:'geometry'})).entities[0];check(reopened.position[0]===entity.position[0]+25&&reopened.position[1]===entity.position[1]+40,'Native movement survives complete-project save and reload');
  if(process.env.SPARK_HOSTED_RENDERER==='1'){
- const state=await cad({op:'state'}),bounds=await page.locator('#cad-frame').boundingBox();check(state.hosted_view===true,'The compiled engine exposes the real viewport host mode');check(Math.abs(state.viewport_size[0]-bounds.width)<2&&Math.abs(state.viewport_size[1]-bounds.height)<2,'Native viewport fills the iframe without foreign chrome or cropping');await page.screenshot({path:path.join(out,'cad-workspace-full-tools.png')});
+ const state=await cad({op:'state'}),bounds=await page.locator('#cad-frame').boundingBox();check(state.hosted_view===true,'The compiled engine exposes the real viewport host mode');check(Math.abs(state.viewport_size[0]-bounds.width)<2&&Math.abs(state.viewport_size[1]-bounds.height)<2,'Native viewport fills the iframe without foreign chrome or cropping');
+ check(await page.locator('[data-cad-document]').count()===1&&await page.locator('#cad-own-layout').isVisible(),'SparkWorld owns the open drawing tabs and layout selector');
+ check(state.layouts.includes('Layout1'),'The source paper layout remains available through the host interface');
+ await page.locator('#cad-own-layout').selectOption('Layout1');await page.waitForFunction(()=>!sparkWorkspace.busy&&sparkWorkspace.project?.activeLayout==='Layout1');
+ check((await cad({op:'state'})).layout==='Layout1','Own layout selector activates the real source paper layout');
+ await page.reload();await ready();check((await cad({op:'state'})).layout==='Layout1','Reload preserves the saved source layout');
+ await page.locator('#cad-own-layout').selectOption('Model');await page.waitForFunction(()=>!sparkWorkspace.busy&&sparkWorkspace.project?.activeLayout==='Model');
+ await page.screenshot({path:path.join(out,'cad-workspace-full-tools.png')});
  }else{
  await page.locator('#studio-info').click();await page.locator('#dialog-actions button').filter({hasText:'Show / hide full CAD tools'}).click();await page.waitForFunction(()=>!sparkCadStudio.compact&&!sparkCadStudio.busy);await page.screenshot({path:path.join(out,'cad-workspace-full-tools.png')});
  check(!await page.evaluate(()=>sparkCadStudio.compact),'Full native CAD tools remain accessible on the same main page');

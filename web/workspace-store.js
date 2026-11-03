@@ -7,6 +7,7 @@ export function createProject(name='Untitled drawing'){return{schema,id:crypto.r
 export function validateProject(value){
  if(!value||value.schema!==schema||typeof value.id!=='string'||typeof value.name!=='string'||value.name.length>200||!value.working||typeof value.working.data!=='string'||value.working.data.length>70*1024*1024||!['dwg','dxf'].includes(value.working.format)||!Number.isFinite(value.factor)||value.factor<=0||!Array.isArray(value.circuits)||value.circuits.length>2000||!value.points||Object.keys(value.points).length>20000||!value.routes||typeof value.definitions?.blocks!=='object')throw Error('This is not a valid SparkWorld CAD project.');
  if(value.original&&(!['dwg','dxf'].includes(value.original.format)||typeof value.original.data!=='string'||value.original.data.length>70*1024*1024))throw Error('Invalid original CAD source.');
+ if(value.activeLayout!==undefined&&(typeof value.activeLayout!=='string'||value.activeLayout.length>1024))throw Error('Invalid drawing layout.');
  const text=(v,max)=>typeof v==='string'&&v.length<=max,id=v=>text(v,80)&&/^[A-Za-z0-9_-]+$/.test(v);
  if(!id(value.id)||!text(value.updated,40)||!Number.isFinite(Date.parse(value.updated))||!text(value.working.name,300))throw Error('Invalid project identity or save date.');
  const circuitIds=new Set();for(const c of value.circuits){if(!c||!id(c.id)||circuitIds.has(c.id)||!text(c.ref,80)||!text(c.name,120)||!text(c.notes,2000))throw Error('Invalid circuit metadata.');circuitIds.add(c.id);}

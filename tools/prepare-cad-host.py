@@ -9,8 +9,8 @@ from pathlib import Path
 import subprocess
 
 UPSTREAM = "0e77cae652271d08c7619238e619f9b6668ae17c"
-FILES = ("src/app/view/mod.rs", "src/app/control/mod.rs")
-HASHES = {'src/app/view/mod.rs': '3422aecae17991fe2340bef06c3b15fc25006bed872a69a273a939fda82a2ab8', 'src/app/control/mod.rs': '57b289fc4baf65a8fcb5eca485747cbeceabed10168889d29ab2d656048d0951'}
+FILES = ("src/app/view/mod.rs", "src/app/control/mod.rs", "scripts/build-web-worker.sh")
+HASHES = {'src/app/view/mod.rs': '3422aecae17991fe2340bef06c3b15fc25006bed872a69a273a939fda82a2ab8', 'src/app/control/mod.rs': '57b289fc4baf65a8fcb5eca485747cbeceabed10168889d29ab2d656048d0951', 'scripts/build-web-worker.sh': 'fc75c0ab179ea626112102e8848e2ad8f030f9bc3d0030e4e2e8bb94be6024a0'}
 
 
 def replace_once(text, before, after):
@@ -25,6 +25,8 @@ def transform_view(text):
     text = replace_once(text, "fn command_line_inset(app: &OpenCADStudio) -> f32 {",
                         "fn command_line_inset(app: &OpenCADStudio) -> f32 {\n    if spark_hosted_view() { return 0.0; }")
     text = replace_once(text, "let viewcube_visible = self.show_viewcube", "let viewcube_visible = !spark_host && self.show_viewcube")
+    text = replace_once(text, "        } else if tab.is_start {\n            start_page_view(",
+                        "        } else if tab.is_start && spark_host {\n            Space::new().width(Fill).height(Fill).into()\n        } else if tab.is_start {\n            start_page_view(")
     for side in ("Left", "Right"):
         name = side.lower() + "_edge"
         before = f"let {name} = self.build_edge_stack(crate::app::config::DockSide::{side}, tab);"
@@ -64,7 +66,13 @@ pub(crate) fn spark_hosted_view() -> bool {
 
 def transform_control(text):
     return replace_once(text, '            "camera":({let c=tab.scene.camera.borrow();',
-                        '            "hosted_view":crate::app::view::spark_hosted_view(),\n            "camera":({let c=tab.scene.camera.borrow();')
+                        '            "hosted_view":crate::app::view::spark_hosted_view(),\n            "layouts":tab.scene.layout_names(),\n            "camera":({let c=tab.scene.camera.borrow();')
+
+
+def transform_worker(text):
+    return replace_once(text,
+                        '  target/wasm32-unknown-unknown/release/ocs_web_worker.wasm',
+                        '  "${CARGO_TARGET_DIR:-target}/wasm32-unknown-unknown/release/ocs_web_worker.wasm"')
 
 
 def prepare(root):
@@ -73,14 +81,14 @@ def prepare(root):
     if actual != UPSTREAM:
         raise ValueError("The CAD source must match pinned commit " + UPSTREAM)
     changes = {}
-    for relative, transform in zip(FILES, (transform_view, transform_control)):
+    for relative, transform in zip(FILES, (transform_view, transform_control, transform_worker)):
         path = root / relative
         original = path.read_bytes()
         digest = hashlib.sha256(original).hexdigest()
         if digest != HASHES.get(relative):
             raise ValueError("Changed or unreviewed CAD source: " + relative)
         changes[path] = transform(original.decode("utf-8"))
-    # Both inputs and all anchors pass before either source file is modified.
+    # All inputs and anchors pass before any source file is modified.
     for path, text in changes.items():
         path.write_text(text, encoding="utf-8", newline="\n")
         print(path.relative_to(root), hashlib.sha256(path.read_bytes()).hexdigest())
