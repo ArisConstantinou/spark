@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 SOURCES = {
-    "src/io/web_worker.rs": "44d8b5b0b089d6503582555f6dc2b6510775f028e238a09d3ce543b9a46ca6f0",
+    "src/io/web_worker.rs": "35afc2f7a151c5b66b1ccff130548a27e4c8345e0cd2b56378174b6fd496861f",
     "src/io/mod.rs": "032f5690bdc495750e3600b26751518932d172921284afd4ed8496a8324edde9",
     "src/app/update/file.rs": "c73d5dd5bb86ae0b16248c7c6c333e2dfcdd4927982a5489e6a3e37b588db687",
 }
@@ -32,18 +32,6 @@ def within(source, first, last, transform):
 
 def trace_worker(source):
     def transform(body):
-        sender = "    let message_sender = sender.clone();"
-        response = "        let data = event.data();"
-        if body.count(sender) != 1 or body.count(response) != 1:
-            raise ValueError("CAD worker handoff changed")
-        body = body.replace(sender, sender + "\n    let finished_worker = worker.clone();", 1)
-        body = body.replace(
-            response,
-            "        // The message already owns its transferred buffer. Release the\n"
-            "        // completed worker before allocating the main-thread model.\n"
-            "        finished_worker.terminate();\n" + response,
-            1,
-        )
         body = mark(body, "                    let bytes = Uint8Array::new(&value).to_vec();", "copy-start")
         body = mark(body, "                    let bytes = Uint8Array::new(&value).to_vec();", "decode-start", after=True)
         body = mark(body, "                    if payload.0 != PROTOCOL_VERSION {", "decode-finished")

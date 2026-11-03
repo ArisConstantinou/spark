@@ -36,7 +36,10 @@ async function importFile(file,{dataBase64,onOpened,initialLayout}={}){
   onOpened?.(opened);
   importNames.set(opened.document_id,file.name);
   sourceName=file.name;
-  await mutation({op:'action',name:'zoom_extents'});
+  // The new engine restores the requested layout's camera or fits the
+  // drawing itself when the file has no saved camera.
+  const restoredInitialView=initialLayout&&opened.hosted_initial_layout&&opened.layout===initialLayout;
+  if(!restoredInitialView)await mutation({op:'action',name:'zoom_extents'});
   $('#studio-operation').textContent='Opened locally · original file retained';
   return true;
  });

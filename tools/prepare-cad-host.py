@@ -10,7 +10,7 @@ from pathlib import Path
 import subprocess
 
 UPSTREAM = "0e77cae652271d08c7619238e619f9b6668ae17c"
-FILES = ("src/app/view/mod.rs", "src/app/control/mod.rs", "scripts/build-web-worker.sh", "src/app/control/entities.rs", "src/io/web_recent.rs", "src/io/web_autosave.rs", "src/app/update/mod.rs", "src/app/mod.rs", "src/app/update/file.rs")
+FILES = ("src/app/view/mod.rs", "src/app/control/mod.rs", "scripts/build-web-worker.sh", "src/app/control/entities.rs", "src/io/web_recent.rs", "src/io/web_autosave.rs", "src/app/update/mod.rs", "src/app/mod.rs", "src/app/update/file.rs", "src/io/web_worker.rs")
 HASHES = {'src/app/view/mod.rs': '3422aecae17991fe2340bef06c3b15fc25006bed872a69a273a939fda82a2ab8', 'src/app/control/mod.rs': '57b289fc4baf65a8fcb5eca485747cbeceabed10168889d29ab2d656048d0951', 'scripts/build-web-worker.sh': 'fc75c0ab179ea626112102e8848e2ad8f030f9bc3d0030e4e2e8bb94be6024a0'}
 HASHES['src/app/control/entities.rs'] = 'c82ad39f92c03c6e50ab32ac6f301a146999eca01d2a3eab2f7b3391a29d44a7'
 HASHES.update({
@@ -19,6 +19,7 @@ HASHES.update({
     'src/app/update/mod.rs': 'f42f9abffe03b563b5e0864c8725001d5c02141b42af0fdccd8f16bd35ca8edc',
     'src/app/mod.rs': 'f55313343a8f9d3c4fb3f67e214eb66a02ef13fcd7ab4d2bab9f49b140ed5069',
     'src/app/update/file.rs': 'e0d2b892c4879cae8db09058081fe7f86ce91239be4a2050d78babf078e1044a',
+    'src/io/web_worker.rs': '44d8b5b0b089d6503582555f6dc2b6510775f028e238a09d3ce543b9a46ca6f0',
 })
 
 
@@ -79,7 +80,7 @@ def transform_control(text):
     text = replace_once(text, '            | "block_define"', '            | "spark_symbol_place"\n            | "block_define"')
     text = replace_once(text, '"capabilities":["commands",', '"capabilities":["spark_symbol_place","commands",')
     text = replace_once(text, '            "camera":({let c=tab.scene.camera.borrow();',
-                        '            "hosted_view":crate::app::view::spark_hosted_view(),\n            "layouts":tab.scene.layout_names(),\n            "camera":({let c=tab.scene.camera.borrow();')
+                        '            "hosted_view":crate::app::view::spark_hosted_view(),\n            "hosted_initial_layout":cfg!(target_arch = "wasm32"),\n            "layouts":tab.scene.layout_names(),\n            "camera":({let c=tab.scene.camera.borrow();')
     return replace_once(text, 'pub(super) fn controlled_open_pending(', '''#[cfg(target_arch = "wasm32")]
 pub(in crate::app) fn spark_open_layout(app: &OpenCADStudio) -> Option<&str> {
     app.control.pending.as_ref()
@@ -106,6 +107,20 @@ def transform_open_view(text):
                     .and_then(|n| names.iter().find(|x| x.eq_ignore_ascii_case(&n)).cloned())
             });'''
     return replace_once(text, before, after)
+
+
+def transform_worker_handoff(text):
+    start = text.index("pub(super) async fn parse_document(")
+    end = text.index("pub(super) async fn sha256_document(", start)
+    body = text[start:end]
+    sender = "    let message_sender = sender.clone();"
+    body = replace_once(body, sender, sender + "\n    let finished_worker = worker.clone();")
+    response = "        let data = event.data();"
+    body = replace_once(body, response,
+                        "        // The message owns its transferred buffer. Release the worker\n"
+                        "        // before allocating the main-thread model.\n"
+                        "        finished_worker.terminate();\n" + response)
+    return text[:start] + body + text[end:]
 
 
 def transform_worker(text):
@@ -168,7 +183,7 @@ def prepare(root):
     if actual != UPSTREAM:
         raise ValueError("The CAD source must match pinned commit " + UPSTREAM)
     changes = {}
-    for relative, transform in zip(FILES, (transform_view, transform_control, transform_worker, transform_entities, transform_recent, transform_autosave, transform_cache_notice, transform_persistence_request, transform_open_view)):
+    for relative, transform in zip(FILES, (transform_view, transform_control, transform_worker, transform_entities, transform_recent, transform_autosave, transform_cache_notice, transform_persistence_request, transform_open_view, transform_worker_handoff)):
         path = root / relative
         original = path.read_bytes()
         digest = hashlib.sha256(original).hexdigest()
