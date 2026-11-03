@@ -11,7 +11,7 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  }throw Error('The complete CAD project did not become ready.');}
  try{
  context=await browser.newContext({viewport:{width:1440,height:1000},deviceScaleFactor:Number(process.env.SPARK_TEST_DPR||1),serviceWorkers:'block',acceptDownloads:true});
- await context.route('**/*',r=>{const u=new URL(r.request().url());if(['http:','https:'].includes(u.protocol)&&u.origin!=='http://127.0.0.1:5173'){report.external.push(u.origin);return r.abort();}return r.continue();});
+ await context.route('**/*',r=>{const u=new URL(r.request().url());if(['http:','https:'].includes(u.protocol)&&(u.origin!=='http://127.0.0.1:5173'||(!u.pathname.startsWith(new URL(baseUrl).pathname)&&!u.pathname.startsWith('/api/')))){report.external.push(u.href);return r.abort();}return r.continue();});
  page=await context.newPage();page.on('pageerror',e=>report.errors.push(e.message));await page.goto(baseUrl+'?workspace=cad'+(process.env.SPARK_HOSTED_RENDERER==='1'?'&renderer=host':''));await page.waitForFunction(()=>window.sparkWorkspace,{},{timeout:120000});
  const cad=(request,write=false)=>page.evaluate(({request,write})=>write?sparkWorkspace.mutate(request):sparkWorkspace.read(request),{request,write});
  await page.locator('#file-input').setInputFiles(fixture);

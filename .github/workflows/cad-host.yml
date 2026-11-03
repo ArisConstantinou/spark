@@ -81,13 +81,11 @@ jobs:
           path: .out/site/app
           include-hidden-files: true
           retention-days: 3
-      - name: Reuse the verified public CAD fixtures
-        uses: actions/download-artifact@v4
+      - uses: actions/setup-dotnet@v5
         with:
-          name: cad-fixtures
-          path: .out
-          run-id: 41513509529
-          github-token: ${{ github.token }}
+          dotnet-version: '10.0.x'
+      - name: Generate the authored public CAD fixtures from source
+        run: dotnet run --project cad-tests/SparkWorld.CadTests.csproj -c Release -- --fixture .out/cad-fixture.dwg
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
