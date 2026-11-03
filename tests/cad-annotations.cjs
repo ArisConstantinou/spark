@@ -40,7 +40,14 @@ module.exports=async function verifyAnnotations({page,cad,check,out}){
  check(single,'A fresh tap places actual CAD text without the old inline editor');
  state=await cad({op:'state'});check(!state.text_editor&&!state.mtext_editor,'Both annotation workflows leave no native text editor open');
  await page.evaluate(()=>sparkWorkspace.save());await page.reload();
- await page.waitForFunction(()=>window.sparkWorkspace?.ready&&sparkWorkspace.project?.working&&!sparkWorkspace.busy,{},{timeout:120000});
+ let restoredReady=false;
+ for(let attempt=0;attempt<4;attempt++){
+  const outcome=await page.waitForFunction(()=>{if(document.querySelector('#dialog')?.open&&document.querySelector('#dialog-title')?.textContent==='CAD graphics notice')return 'graphics';if(window.sparkWorkspace?.ready&&sparkWorkspace.project?.working&&!sparkWorkspace.busy)return 'ready';},{},{timeout:120000});
+  if(await outcome.jsonValue()==='ready'){restoredReady=true;break;}
+  const notice=await cad({op:'state'});check(/GpuWarning/.test(JSON.stringify(notice.modal)),'Reload only acknowledges the known headless graphics warning');
+  await page.getByRole('button',{name:'Continue with software rendering',exact:true}).click();
+ }
+ check(restoredReady,'Text project restore completes after its explicit graphics notice');
  const restored=(await cad({op:'query',handles:[entity.handle],detail:'full'})).entities[0];
  // The DWG writer resolves optional layer references, entity space and X-axis
  // direction on first serialization. Verify those derived fields separately;
