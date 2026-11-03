@@ -11,6 +11,7 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  }throw Error('The complete CAD project did not become ready.');}
  try{
  context=await browser.newContext({viewport:{width:1440,height:1000},deviceScaleFactor:Number(process.env.SPARK_TEST_DPR||1),serviceWorkers:'block',acceptDownloads:true});
+ await require('./legacy-ui-profile.cjs')(context);
  await context.route('**/*',r=>{const u=new URL(r.request().url());if(['http:','https:'].includes(u.protocol)&&(u.origin!=='http://127.0.0.1:5173'||(!u.pathname.startsWith(new URL(baseUrl).pathname)&&!u.pathname.startsWith('/api/')))){report.external.push(u.href);return r.abort();}return r.continue();});
  page=await context.newPage();page.setDefaultTimeout(30000);page.on('pageerror',e=>report.errors.push(e.message));await page.goto(baseUrl+'?workspace=cad'+(process.env.SPARK_HOSTED_RENDERER==='1'?'&renderer=host':''));await page.waitForFunction(()=>window.sparkWorkspace,{},{timeout:120000});
  const cad=async(request,write=false)=>{let timer;console.log('CAD request '+request.op+(request.cmd?' '+request.cmd:''));try{return await Promise.race([page.evaluate(({request,write})=>write?sparkWorkspace.mutate(request):sparkWorkspace.read(request),{request,write}),new Promise((_,reject)=>timer=setTimeout(()=>reject(Error('Native CAD request timed out: '+request.op)),120000))]);}finally{clearTimeout(timer);}};
