@@ -1,4 +1,4 @@
-"""Patch only pinned AC1032 MTEXT text-frame serialization, without upgrading CAD.
+"""Patch pinned MTEXT text-frame serialization and DXF annotation reading.
 
 ODA DWG specification5.4.1 section20.4.46, p149 requires background
 properties for R2018 text frames even when the background-fill bit is unset.

@@ -9,6 +9,8 @@ on:
       - 'tools/cad-symbol-operation.rs'
       - 'tools/finalize-cad-host.py'
       - 'tools/prepare-cad-codec.py'
+      - 'tools/prepare-locked-cad-host.py'
+      - 'tools/cad-host-frame-baseline.json'
       - 'cad-tests/**'
       - 'web/**'
       - 'tests/cad-*.cjs'
@@ -69,9 +71,9 @@ jobs:
         run: |
           npm install --prefix .out/qa --no-audit --no-fund playwright@1.62.1
           .out/qa/node_modules/.bin/playwright install --with-deps chromium
-      - name: Reproduce the frame regression on the current released component
+      - name: Reproduce regressions on the pinned pre-fix component
         run: |
-          python3 tools/prepare-locked-cad-host.py --output .out/site/app
+          python3 tools/prepare-locked-cad-host.py --frame-baseline --output .out/site/app
           cp -a web/. .out/site/
           node tests/cad-mtext-codec.cjs --expect-frame-failure
       - name: Apply the pinned MTEXT wire-format correction

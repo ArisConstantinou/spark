@@ -17,8 +17,9 @@ import zipfile
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output', required=True)
 parser.add_argument('--verify-only', action='store_true')
+parser.add_argument('--frame-baseline', action='store_true', help='Use the immutable pre-fix regression component')
 args = parser.parse_args()
-lock = json.loads(Path(__file__).with_name('cad-host-component.json').read_text())
+lock = json.loads(Path(__file__).with_name('cad-host-frame-baseline.json' if args.frame_baseline else 'cad-host-component.json').read_text())
 target = Path(args.output).resolve()
 sha = lambda data: hashlib.sha256(data).hexdigest()
 

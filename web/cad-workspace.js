@@ -6,6 +6,7 @@ import {NativeElectrical} from './native-electrical.js';
 import {createProject,projectStore,validateProject,pointForEntity} from './workspace-store.js';
 import {mountCadControls} from './cad-controls.js';
 import {installCadGestures} from './cad-gestures.js';
+import {installCadContextMenu} from './cad-context-menu.js';
 import {drawingLoader,readDrawing,readSelectedFile,interruptedImport,clearInterruptedImport} from './cad-loading.js';
 const $=s=>document.querySelector(s),delay=ms=>new Promise(r=>setTimeout(r,ms));
 const projects=new Map(),adapters=new Map();let currentId,project,busy=false,panel=null,chosen=null,activeCircuit='',lastSelection='',selection=null,lastRevision=-1,saveTimer,pollSerial=0,placementDocumentId=null;
@@ -138,9 +139,17 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){chosen=null;placeme
 while(!api())await delay(50);while(api().busy)await delay(50);await poll();
 // Native Open/Drop and Ctrl+S use the same project boundary as the parent UI.
 // Font and other non-CAD file inputs continue to the native editor unchanged.
-nativeControls=await mountCadControls({read,write:mutate,task,save:saveCurrent,dialog,toast,frame:$('#cad-frame'),compact,switchDocument,switchLayout,describeDocument:d=>{const p=projects.get(d.id);return{displayName:p?.name||d.path?.split(/[\\/]/).at(-1)||d.title,dirty:!p||p.dirty||p.savedRevision!==d.revision};}});
+nativeControls=await mountCadControls({read,write:mutate,task,save:saveCurrent,dialog,toast,frame:$('#cad-frame'),compact,switchDocument,switchLayout,hostCommands:{LAYER:()=>openPanel('Layers'),LA:()=>openPanel('Layers'),PROPERTIES:()=>nativeControls.properties(),PR:()=>nativeControls.properties(),OPTIONS:()=>nativeControls.openSettings(),OP:()=>nativeControls.openSettings()},describeDocument:d=>{const p=projects.get(d.id);return{displayName:p?.name||d.path?.split(/[\\/]/).at(-1)||d.title,dirty:!p||p.dirty||p.savedRevision!==d.revision};}});
 nativeControls.update(nativeState);
 const inner=$('#cad-frame').contentWindow;
+installCadContextMenu({inner,frame:$('#cad-frame'),state:()=>nativeState,enabled:()=>!!nativeState?.hosted_view&&!busy&&!nativeState.modal&&!nativeState.block_editor,
+ onError:error=>toast(error.message),act:async(id,pinned)=>{
+  const state=await read({op:'state'});if(state.document_id!==pinned.documentId)throw Error('The active drawing changed. Open the menu again.');
+  if(state.command?.name!==pinned.command||JSON.stringify(state.selection)!==JSON.stringify(pinned.selection))throw Error('The command or selection changed. Open the menu again.');
+  if(['move','copy','rotate','erase'].includes(id))return nativeControls.execute(id.toUpperCase());
+  if(id==='layers')return openPanel('Layers');if(id==='details')return details();if(id==='settings')return nativeControls.openSettings();
+  return task('Drawing · '+id,()=>mutate(id==='fit'?{op:'action',name:'zoom_extents'}:id==='finish'?{op:'input',kind:'enter'}:{op:id}));
+ }});
 // A deliberate mouse double-click opens the host's Details, rather than the
 // engine's separate rich-text/property window. A normal click only selects.
 let lastCanvasPress=null,suppressDoubleRelease=false,detailsOpening=null;

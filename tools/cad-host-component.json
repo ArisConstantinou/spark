@@ -1,10 +1,10 @@
 {
-  "release_tag": "cad-host-af14adc",
-  "asset_id": 705031680,
-  "archive_url": "https://github.com/ArisConstantinou/spark/releases/download/cad-host-af14adc/SparkWorld-CAD-host-af14adc.zip",
-  "archive_sha256": "a950f348df0671ef0ea81a6f735fdcd1043d547173f5bd619051c7fc0db88a2b",
-  "manifest_sha256": "2bebb86cf4ea893610b0b8bd64d643cf3b4776e18048971cb582885b0cb00825",
-  "integration_commit": "af14adc49352d9d6c6f4d686be6ee405b8ec7aa9",
+  "release_tag": "cad-host-c423f02",
+  "asset_id": 705885150,
+  "archive_url": "https://github.com/ArisConstantinou/spark/releases/download/cad-host-c423f02/SparkWorld-CAD-host-c423f02.zip",
+  "archive_sha256": "6c1335f29dbe24f6aabda05198291858c74844e316e591f464bc6190ff09e401",
+  "manifest_sha256": "27f8a5cf7b728805c1d0953a6da58d7c733806c346d21738811ee1aa8f732e7d",
+  "integration_commit": "c423f020cebb09391bde613d147437c71385131c",
   "upstream_commit": "0e77cae652271d08c7619238e619f9b6668ae17c",
-  "patch_sha256": "a3998bf5fecb4b05ce9ce2c8ecb54f5df3943ce5ade5dfe018ecc915d7f7cef5"
+  "patch_sha256": "c7e8670a457ebb6bdfc8714c8a71dd8c6f0db522aa90fdefeba6481288ccf232"
 }
