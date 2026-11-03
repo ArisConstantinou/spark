@@ -31,5 +31,5 @@
  <input id="file-input" type="file" aria-label="Open DWG or DXF" hidden>
  <dialog id="dialog"><form method="dialog" id="dialog-form"><div class="dialog-head"><h2 id="dialog-title"></h2><button type="button" id="dialog-close" aria-label="Close dialog">×</button></div><div id="dialog-body"></div><div id="dialog-actions" class="dialog-actions"></div></form></dialog>
  <div id="toast" class="toast" role="status" hidden></div>
- <script type="module" src="cad-studio.js"></script>
+ <script type="module">import {desktop} from './platform.js';if(desktop)await import('./cad-studio.js');else location.replace(new URL('./?workspace=cad',document.baseURI));</script>
 </body></html>

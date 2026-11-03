@@ -54,8 +54,10 @@ jobs:
           key: browser-${{ runner.os }}-${{ steps.dotnet.outputs.dotnet-version }}-${{ hashFiles('cad/*.cs', 'cad/*.csproj', 'cad-browser/*.cs', 'cad-browser/*.csproj') }}
       - name: Report output sizes
         run: du -sh .out/browser && find .out/browser -maxdepth 3 -type f | head -40
-      - name: Prepare the pinned ready-made CAD editor
-        run: python tools/prepare-cad-editor.py --output .out/site/app --verified-site https://arisconstantinou.github.io/spark/app/
+      - name: Prepare the locked SparkWorld viewport component
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/prepare-locked-cad-host.py --output .out/site/app
       - name: Assemble the web release
         run: |
           mkdir -p .out/site/engine
@@ -65,7 +67,7 @@ jobs:
           cp THIRD_PARTY_NOTICES.md LICENSE .out/site/
           cp -a licenses .out/site/
           touch .out/site/.nojekyll
-          python -c 'import json,os; open(".out/site/version.json","w").write(json.dumps({"commit":os.environ["GITHUB_SHA"],"cad_editor":"OpenCADStudio v2026.44"}))'
+          python -c 'import json,os; open(".out/site/version.json","w").write(json.dumps({"commit":os.environ["GITHUB_SHA"],"cad_editor":"SparkWorld viewport host","cad_core":"f3508003536b5d4cc6500da700cacd3ab40d607a"}))'
       - name: Install pinned browser verification tools
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.out/qa-browsers
@@ -79,7 +81,7 @@ jobs:
       - name: Verify the assembled web app under /spark/
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.out/qa-browsers
-        run: node tests/web-release.cjs
+        run: node tests/unified-web-release.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

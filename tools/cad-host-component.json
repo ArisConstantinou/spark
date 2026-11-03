@@ -1,0 +1,10 @@
+{
+  "release_tag": "cad-host-f350800",
+  "asset_id": 704706520,
+  "archive_url": "https://github.com/ArisConstantinou/spark/releases/download/cad-host-f350800/SparkWorld-CAD-host-f350800.zip",
+  "archive_sha256": "e32c335ee785e17054b23d29e5296993e635ac9b567712018cd3e6ebf94ac508",
+  "manifest_sha256": "db340bf9dad28c289322b58a1d00646539820c56a8c7175bfa967da8cf9654ca",
+  "integration_commit": "f3508003536b5d4cc6500da700cacd3ab40d607a",
+  "upstream_commit": "0e77cae652271d08c7619238e619f9b6668ae17c",
+  "patch_sha256": "9158ea72c5a9054c222649efcaf88eb37e6c7a305c3edafbc3d06274f90919c7"
+}

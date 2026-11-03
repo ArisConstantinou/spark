@@ -4,9 +4,16 @@ const schema='sparkworld/cad-v2';let database;
 const open=()=>database||(database=new Promise((resolve,reject)=>{const r=indexedDB.open('sparkworld-cad-projects',1);r.onupgradeneeded=()=>r.result.createObjectStore('projects',{keyPath:'id'});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);}));
 async function transaction(mode,fn){const db=await open();return new Promise((resolve,reject)=>{const tx=db.transaction('projects',mode),r=fn(tx.objectStore('projects'));tx.oncomplete=()=>resolve(r.result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('Project storage was interrupted.'));});}
 export function createProject(name='Untitled drawing'){return{schema,id:crypto.randomUUID(),name,updated:new Date().toISOString(),original:null,working:null,definitions:{blocks:{}},points:{},circuits:[],routes:{},factor:1};}
+// Undo keeps metadata for Redo. A recycled native handle is not enough to
+// associate that metadata with a different source object or block definition.
+export function pointForEntity(project,entity){
+ const point=project?.points?.[entity?.handle];
+ return point&&typeof entity.block==='string'&&entity.block===project.definitions?.blocks?.[point.type]?point:null;
+}
 export function validateProject(value){
  if(!value||value.schema!==schema||typeof value.id!=='string'||typeof value.name!=='string'||value.name.length>200||!value.working||typeof value.working.data!=='string'||value.working.data.length>70*1024*1024||!['dwg','dxf'].includes(value.working.format)||!Number.isFinite(value.factor)||value.factor<=0||!Array.isArray(value.circuits)||value.circuits.length>2000||!value.points||Object.keys(value.points).length>20000||!value.routes||typeof value.definitions?.blocks!=='object')throw Error('This is not a valid SparkWorld CAD project.');
  if(value.original&&(!['dwg','dxf'].includes(value.original.format)||typeof value.original.data!=='string'||value.original.data.length>70*1024*1024))throw Error('Invalid original CAD source.');
+ if(value.activeLayout!==undefined&&(typeof value.activeLayout!=='string'||value.activeLayout.length>1024))throw Error('Invalid drawing layout.');
  const text=(v,max)=>typeof v==='string'&&v.length<=max,id=v=>text(v,80)&&/^[A-Za-z0-9_-]+$/.test(v);
  if(!id(value.id)||!text(value.updated,40)||!Number.isFinite(Date.parse(value.updated))||!text(value.working.name,300))throw Error('Invalid project identity or save date.');
  const circuitIds=new Set();for(const c of value.circuits){if(!c||!id(c.id)||circuitIds.has(c.id)||!text(c.ref,80)||!text(c.name,120)||!text(c.notes,2000))throw Error('Invalid circuit metadata.');circuitIds.add(c.id);}

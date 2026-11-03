@@ -1,20 +1,23 @@
 # Third-party components
 
-## Open CAD Studio v2026.44 — GPL-3.0
+## Open CAD Studio web viewport component — GPL-3.0
 
 Copyright Hakan Seven and contributors. Source and corresponding-source download:
-https://github.com/HakanSeven12/OpenCADStudio/tree/v2026.44 and
-https://github.com/HakanSeven12/OpenCADStudio/archive/refs/tags/v2026.44.zip .
+https://github.com/HakanSeven12/OpenCADStudio/tree/0e77cae652271d08c7619238e619f9b6668ae17c and
+https://github.com/HakanSeven12/OpenCADStudio/archive/0e77cae652271d08c7619238e619f9b6668ae17c.zip .
 SparkWorld's integration and combined web distribution are provided under GPL-3.0;
 see LICENSE and https://arisconstantinou.github.io/spark/cad-sources.html .
-The pinned acquisition and modification script is tools/prepare-cad-editor.py.
-The original archive SHA-256 is
-5172f71b607e68881e6e2aa4be2fae208081a6ea8f5b27beb5367fb877b60053.
+The pinned source transformation is tools/prepare-cad-host.py; the web compiler
+workflow is .github/workflows/cad-host.yml. tools/cad-host-component.json locks
+the built archive, integration commit and manifest digest; the exact build patch
+is distributed as app/SPARKWORLD-SOURCE.patch.
 
-Modifications dated 2026-11-02 remove the analytics loader and video feed,
-restrict connections to the host, use a bundled favicon, make bootstrap URLs
-relative and disable the component service worker. JavaScript/WASM editor
-binaries remain unchanged. The component retains GPL text and its Noto font
+The source-built web component adds optional viewport-only presentation and
+layout/viewport state, while retaining native drawing/file support. Its worker
+build uses the declared target directory. Distribution changes remove analytics
+and the remote video feed, restrict connections to the host, use relative asset
+URLs and disable the component service worker. Its compiled binaries therefore
+differ from the original ready-made distribution. The component retains GPL text and its Noto font
 OFL notices under app/LICENSE-GPL-3.0.txt and app/fonts/OFL.txt. Its Phosphor
 icon notice is retained in licenses/PHOSPHOR.txt. Upstream build scripts and
 Cargo.lock identify its source dependencies.

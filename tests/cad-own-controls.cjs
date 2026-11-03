@@ -16,8 +16,18 @@ module.exports=async function verifyOwnControls({page,cad,check,out}){
  check((await cad({op:'query',handles:[line.handle],detail:'geometry'})).entities[0].start[0]===125,'Own property editor updates the real CAD start coordinate');
  await page.locator('#cad-own-undo').click();await page.waitForFunction(()=>!sparkWorkspace.busy);check((await cad({op:'query',handles:[line.handle],detail:'geometry'})).entities[0].start[0]===100,'Own Undo reverses the native property change');
  await page.locator('#cad-own-redo').click();await page.waitForFunction(()=>!sparkWorkspace.busy);check((await cad({op:'query',handles:[line.handle],detail:'geometry'})).entities[0].start[0]===125,'Own Redo restores the property change');
- await page.locator('[data-cad-tab="Modify"]').click();check(await page.locator('[data-cad-command="MOVE"]').isVisible(),'Own Modify tab exposes working native movement tools');
- await page.locator('[data-cad-tab="Draw"]').click();await page.screenshot({path:path.join(out,'cad-own-controls-desktop.png')});
+ const beforePolylines=await cad({op:'query',type:'LwPolyline',detail:'geometry',limit:10000});
+ await page.locator('[data-cad-command="PLINE"]').click();await page.waitForFunction(()=>!sparkWorkspace.busy);
+ for(const value of ['100,500','300,500','300,700']){await page.locator('#cad-own-input').fill(value);await page.locator('.cad-command-row button[type=submit]').click();await page.waitForFunction(()=>!sparkWorkspace.busy);}
+ const close=page.locator('.cad-command-options button').filter({hasText:/^Close$/});await close.waitFor();await close.click();await page.waitForFunction(()=>!sparkWorkspace.busy);
+ const afterPolylines=await cad({op:'query',type:'LwPolyline',detail:'full',limit:10000}),polyline=afterPolylines.entities.find(e=>!beforePolylines.entities.some(b=>b.handle===e.handle));
+ check(afterPolylines.count===beforePolylines.count+1&&polyline?.properties?.is_closed===true&&!(await cad({op:'state'})).command,'Own command option buttons close a real native polyline');
+ await page.locator('#cad-tool-group-toggle').click();await page.locator('[data-cad-tab="Modify"]').click();check(await page.locator('[data-cad-command="MOVE"]').isVisible(),'Own Modify tab exposes working native movement tools');
+ await cad({op:'select',handles:[line.handle]},true);await page.locator('[data-cad-command="MOVE"]').click();await page.waitForFunction(()=>!sparkWorkspace.busy);
+ for(const value of ['0,0','25,40']){await page.locator('#cad-own-input').fill(value);await page.locator('.cad-command-row button[type=submit]').click();await page.waitForFunction(()=>!sparkWorkspace.busy);}
+ const movedLine=(await cad({op:'query',handles:[line.handle],detail:'geometry'})).entities[0];check(movedLine.start[0]===150&&movedLine.start[1]===140&&movedLine.end[0]===925,'Own Move tool and coordinate fields transform the selected native object');
+ await page.locator('#cad-own-undo').click();await page.waitForFunction(()=>!sparkWorkspace.busy);check((await cad({op:'query',handles:[line.handle],detail:'geometry'})).entities[0].start[0]===125,'One Undo reverses the complete Move command');
+ await page.locator('#cad-tool-group-toggle').click();await page.locator('[data-cad-tab="Draw"]').click();await page.screenshot({path:path.join(out,'cad-own-controls-desktop.png')});
  const pending=page.waitForEvent('download');await page.locator('#studio-info').click();await page.locator('#dialog-actions button').filter({hasText:'Export DWG copy'}).click();const download=await pending;const exportPath=path.join(out,'cad-own-controls-roundtrip.dwg');await download.saveAs(exportPath);check((await fs.readFile(exportPath)).subarray(0,6).toString()==='AC1032','Own controls produce a genuine DWG 2018 export');
  await page.locator('#file-input').setInputFiles(exportPath);await page.waitForFunction(()=>!sparkWorkspace.busy&&sparkWorkspace.project?.original?.name==='cad-own-controls-roundtrip.dwg',{},{timeout:120000});
  const restored=(await cad({op:'query',handles:[line.handle],detail:'geometry'})).entities[0];check(restored?.start[0]===125&&restored?.end[0]===900,'Native line and property changes survive DWG reopen');
