@@ -6,7 +6,7 @@ Before: the engine's context menu remained visible inside the workspace.
 
 ![Before](before.png)
 
-After: drawing actions use SparkWorld controls and native document operations. Active commands expose Accept and Cancel. Details requires a selection; Layers and UI Settings open the existing owned panels. Typed `LAYER`, `PROPERTIES` and `OPTIONS` use the same panels.
+After: drawing actions use SparkWorld controls and native document operations. The menu reads the current native selection when opened. Active commands expose Accept and Cancel. Details requires a selection; Layers and UI Settings open the existing owned panels. Typed `LAYER`, `PROPERTIES` and `OPTIONS` use the same panels.
 
 ![After](after.png)
 
