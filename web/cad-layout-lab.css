@@ -42,6 +42,8 @@
 .ui-tool-surface [aria-pressed=true]{background:#174d78;border-color:var(--ui-accent)}
 .ui-utilities{border-top:1px solid var(--line);margin-top:14px;padding-top:12px;grid-template-columns:repeat(4,minmax(0,1fr))}
 .ui-utilities button{min-height:52px;font-size:12px;background:transparent}
+.ui-workspace-menu{margin-top:8px;border-top:1px solid var(--line);padding-top:8px}.ui-workspace-menu>summary{display:flex;justify-content:space-between;gap:12px;align-items:center;list-style:none;cursor:pointer;min-height:44px;font-size:14px;padding:8px;color:#c8deef;border:1px solid #3b596f;border-radius:8px;background:#142e42}.ui-workspace-menu>summary::-webkit-details-marker{display:none}.ui-workspace-menu[open]>summary{border-color:var(--ui-accent)}.ui-workspace-menu .ui-utilities{border:0;padding:0;margin-top:8px}
+.ui-has-selection .ui-tool-surface[data-layout=context]{left:12px;right:auto;transform:none}
 .ui-layout-select{display:flex;gap:12px;align-items:center;font-size:14px;margin-top:12px;justify-content:space-between}
 .ui-layout-select select{height:44px;min-width:0;max-width:60%;font-size:14px}
 .ui-command-search{font-size:14px;display:grid;gap:8px;margin-bottom:12px}
