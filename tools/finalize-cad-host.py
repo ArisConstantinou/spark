@@ -29,7 +29,7 @@ html = html.replace('</head>', '<link rel="icon" href="./logo.svg" type="image/s
 html_file.write_text(html, encoding="utf-8")
 (output / "videos.json").write_text("[]\n", encoding="utf-8")
 shutil.copyfile(source / "LICENSE", output / "LICENSE-GPL-3.0.txt")
-patch = subprocess.check_output(["git", "diff", "--", "src/app/view/mod.rs", "src/app/control/mod.rs", "src/app/control/entities.rs", "scripts/build-web-worker.sh", "Cargo.toml", "Cargo.lock"], cwd=source)
+patch = subprocess.check_output(["git", "diff", "--", "src/app/view/mod.rs", "src/app/control/mod.rs", "src/app/control/entities.rs", "src/io/web_recent.rs", "src/io/web_autosave.rs", "src/app/update/mod.rs", "scripts/build-web-worker.sh", "Cargo.toml", "Cargo.lock"], cwd=source)
 (output / "SPARKWORLD-SOURCE.patch").write_bytes(patch)
 upstream = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
 codec_metadata = {}
@@ -65,7 +65,8 @@ if args.codec_source:
     "Source patch: SPARKWORLD-SOURCE.patch. Build and integration scripts: "
     "https://github.com/ArisConstantinou/spark/tree/codex/cad-layer-visibility .\n"
     "Changes: optional viewport-only presentation; state hosted_view/layouts; atomic lazy electrical placement; worker target path; same-origin CSP; "
-    "analytics and component service worker disabled. No CAD entity support removed.\n", encoding="utf-8")
+    "analytics and component service worker disabled; capability-safe optional browser storage; "
+    "recent-cache failures do not invalidate successful opens/downloads. No CAD entity support removed.\n", encoding="utf-8")
 files = {p.relative_to(output).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
          for p in sorted(output.rglob("*")) if p.is_file() and p.name != ".component-manifest.json"}
 manifest = {"upstream_commit": upstream, "presentation": "sparkworld-viewport-host",

@@ -7,6 +7,7 @@ on:
       - '.github/workflows/cad-host.yml'
       - 'tools/prepare-cad-host.py'
       - 'tools/cad-symbol-operation.rs'
+      - 'tools/cad-browser-storage.rs'
       - 'tools/finalize-cad-host.py'
       - 'tools/prepare-cad-codec.py'
       - 'tools/prepare-locked-cad-host.py'
