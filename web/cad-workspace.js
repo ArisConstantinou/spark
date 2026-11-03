@@ -148,18 +148,32 @@ nativeControls=await mountCadControls({read,write:mutate,task,save:saveCurrent,d
 const inner=$('#cad-frame').contentWindow;
 // A deliberate mouse double-click opens the host's Details, rather than the
 // engine's separate rich-text/property window. A normal click only selects.
-let lastCanvasPress=null,suppressDoubleRelease=false;
+let lastCanvasPress=null,suppressDoubleRelease=false,detailsOpening=null;
+function openDoubleClickDetails(){
+ if(detailsOpening||$('#dialog').open)return;
+ detailsOpening=task('Opening selected object…',async()=>{
+  const state=await read({op:'state'});if(state.command||state.modal)return;
+  // A native editor can have opened on the same second press before the
+  // browser's dblclick event arrives. Close that fresh editor before showing
+  // host properties; an already-open editor is excluded by the event guard.
+  if(state.text_editor||state.mtext_editor)await mutate({op:'cancel'});
+  await poll(true);await details();
+ }).catch(error=>toast(error.message)).finally(()=>detailsOpening=null);
+}
 window.addEventListener('pointerup',()=>suppressDoubleRelease=false,true);
 inner.addEventListener('pointercancel',()=>{lastCanvasPress=null;suppressDoubleRelease=false;},true);
 inner.addEventListener('pointerdown',event=>{
  if(event.pointerType!=='mouse'||event.button!==0||event.target?.tagName!=='CANVAS'||busy||nativeState?.command||nativeState?.modal||nativeState?.text_editor||nativeState?.mtext_editor)return;
  const previous=lastCanvasPress;lastCanvasPress={time:event.timeStamp,x:event.clientX,y:event.clientY};
  if(previous&&event.timeStamp-previous.time<400&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<6&&nativeState?.selection?.length){
-  lastCanvasPress=null;suppressDoubleRelease=true;event.preventDefault();event.stopImmediatePropagation();poll(true).then(details).catch(error=>toast(error.message));
+  lastCanvasPress=null;suppressDoubleRelease=true;event.preventDefault();event.stopImmediatePropagation();openDoubleClickDetails();
  }
 },true);
 inner.addEventListener('pointerup',event=>{if(suppressDoubleRelease&&event.pointerType==='mouse'&&event.button===0){suppressDoubleRelease=false;event.preventDefault();event.stopImmediatePropagation();}},true);
-inner.addEventListener('dblclick',event=>{if(event.target?.tagName==='CANVAS'){event.preventDefault();event.stopImmediatePropagation();}},true);
+inner.addEventListener('dblclick',event=>{
+ if(event.target?.tagName!=='CANVAS'||event.button!==0||nativeState?.command||nativeState?.modal||nativeState?.text_editor||nativeState?.mtext_editor)return;
+ event.preventDefault();event.stopImmediatePropagation();openDoubleClickDetails();
+},true);
 cadGestures=installCadGestures({inner,enabled:()=>!!nativeState?.hosted_view&&!!project&&!busy&&!nativeState.command&&!nativeState.modal&&!nativeState.block_editor,read,write:mutate,onError:error=>toast(error.message),onFinish:()=>poll(true)});
 inner.onbeforeunload=null;
 api().setPresentation({name:state=>projects.get(state?.document_id)?.name,dirty:state=>!!state?.documents?.some(doc=>!doc.start&&(!projects.has(doc.id)||projects.get(doc.id).dirty||projects.get(doc.id).savedRevision!==doc.revision)),status:state=>{const p=projects.get(state?.document_id);return p?(p.dirty||p.savedRevision!==state.revision?'Unsaved project changes':'Complete project saved on this device'):null;}});
