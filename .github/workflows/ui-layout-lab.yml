@@ -1,6 +1,14 @@
 name: Verify UI Layout Lab
 on:
   workflow_dispatch:
+  push:
+    branches: [codex/cad-layer-visibility]
+    paths:
+      - '.github/workflows/ui-layout-lab.yml'
+      - 'web/cad-layout-lab.*'
+      - 'web/ui-preferences.js'
+      - 'tests/ui-layout-lab.cjs'
+      - 'tests/run-ui-layout-lab.cjs'
 permissions:
   contents: read
 jobs:
