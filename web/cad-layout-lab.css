@@ -109,3 +109,19 @@
  [data-ui-navigation=shown] .ui-trial,.ui-nav-open .ui-trial{bottom:calc(84px + env(safe-area-inset-bottom))}
 }
 @media(prefers-reduced-motion:reduce){.ui-tool-surface,.ui-lab{scroll-behavior:auto}}
+
+/* The empty workspace is a start screen, not a drawing beneath floating tools.
+   Mobile navigation is visible by default; focus mode remains an explicit choice. */
+@media(max-width:580px){
+ .ui-welcome .cad-own-welcome{justify-content:center;gap:16px;padding:24px 20px}
+ .ui-welcome .cad-own-welcome>svg{height:82px;max-width:230px}
+ .ui-welcome .cad-own-welcome h1{font-size:25px;line-height:1.25}
+ .ui-welcome .cad-own-welcome p{font-size:16px;line-height:1.55;max-width:340px}
+ .ui-welcome .cad-own-welcome>div{width:100%;gap:10px;flex-wrap:wrap}
+ .ui-welcome .cad-own-welcome button{min-height:48px;font-size:15px;flex:0 1 auto}
+ .ui-welcome #studio-document,.ui-welcome #save,.ui-welcome .ui-launchers [data-ui-launch]{display:none!important}
+ .ui-welcome[data-ui-navigation=shown][data-ui-header=shown] .ui-launchers,
+ .ui-welcome[data-ui-navigation=shown][data-ui-header=compact] .ui-launchers{display:none}
+ .ui-welcome[data-ui-navigation=auto] .cad-own-welcome,
+ .ui-welcome[data-ui-header=auto] .cad-own-welcome{padding-top:86px;justify-content:flex-start}
+}
