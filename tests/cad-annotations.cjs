@@ -58,10 +58,18 @@ module.exports=async function verifyAnnotations({page,cad,check,out}){
  check(restored.properties.common.entity_mode===2&&restored.properties.common.layer_handle===parseInt(layer.handle,16)&&JSON.stringify(restored.properties.dwg_x_direction)==='{"x":1,"y":0,"z":0}','DWG serialization resolves the correct Model space, layer handle and text direction');
  check((await cad({op:'query',handles:[single.handle]})).entities.length===1,'Placed single-line text survives native save and reopen');
  await page.setViewportSize({width:1440,height:1000});
+ // Reload preserves the drawing's camera. Bring this authored annotation into
+ // view before testing a physical mouse gesture at its drawing coordinates.
+ await cad({op:'run',cmd:'ZOOM WINDOW'},true);
+ await cad({op:'input',kind:'token',text:'40,110'},true);
+ await cad({op:'input',kind:'token',text:'400,270'},true);
+ await page.waitForFunction(()=>!sparkWorkspace.busy);
  await cad({op:'select',handles:[entity.handle]},true);await page.waitForFunction(handle=>sparkWorkspace.selection?.handle===handle,entity.handle);
  const camera=(await cad({op:'state'})).camera,box2=await page.locator('#cad-frame').boundingBox(),unit=2*camera.distance*Math.tan(camera.fov_y/2)/box2.height;
+ const localX=box2.width/2+(110-camera.target[0])/unit,localY=box2.height/2-(210-camera.target[1])/unit;
+ check(localX>=0&&localX<box2.width&&localY>=0&&localY<box2.height,'The restored annotation click lands inside the CAD viewport');
  // Slow event delivery must still honor the browser's recognized double-click.
- await page.mouse.dblclick(box2.x+box2.width/2+(110-camera.target[0])/unit,box2.y+box2.height/2-(210-camera.target[1])/unit,{delay:300});
+ await page.mouse.dblclick(box2.x+localX,box2.y+localY,{delay:300});
  await page.waitForFunction(()=>document.querySelector('#dialog').open&&document.querySelector('#dialog-title').textContent==='CAD properties');
  state=await cad({op:'state'});check(!state.text_editor&&!state.mtext_editor,'Mouse double-click opens owned Details instead of the native text window');
  await page.screenshot({path:path.join(out,'cad-doubleclick-after.png')});
