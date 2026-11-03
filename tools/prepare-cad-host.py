@@ -10,9 +10,15 @@ from pathlib import Path
 import subprocess
 
 UPSTREAM = "0e77cae652271d08c7619238e619f9b6668ae17c"
-FILES = ("src/app/view/mod.rs", "src/app/control/mod.rs", "scripts/build-web-worker.sh", "src/app/control/entities.rs")
+FILES = ("src/app/view/mod.rs", "src/app/control/mod.rs", "scripts/build-web-worker.sh", "src/app/control/entities.rs", "src/io/web_recent.rs", "src/io/web_autosave.rs", "src/app/update/mod.rs", "src/app/mod.rs")
 HASHES = {'src/app/view/mod.rs': '3422aecae17991fe2340bef06c3b15fc25006bed872a69a273a939fda82a2ab8', 'src/app/control/mod.rs': '57b289fc4baf65a8fcb5eca485747cbeceabed10168889d29ab2d656048d0951', 'scripts/build-web-worker.sh': 'fc75c0ab179ea626112102e8848e2ad8f030f9bc3d0030e4e2e8bb94be6024a0'}
 HASHES['src/app/control/entities.rs'] = 'c82ad39f92c03c6e50ab32ac6f301a146999eca01d2a3eab2f7b3391a29d44a7'
+HASHES.update({
+    'src/io/web_recent.rs': '98bcfde9fd0b1d067e38e0306724b82df50bb223b336a8ea6e2c281ae4eaf758',
+    'src/io/web_autosave.rs': '0d5312ee4390c69cc6eb8c6f1a72351976750f2baeef0750a64ac0aa48a93f90',
+    'src/app/update/mod.rs': 'f42f9abffe03b563b5e0864c8725001d5c02141b42af0fdccd8f16bd35ca8edc',
+    'src/app/mod.rs': 'f55313343a8f9d3c4fb3f67e214eb66a02ef13fcd7ab4d2bab9f49b140ed5069',
+})
 
 
 def replace_once(text, before, after):
@@ -86,13 +92,56 @@ def transform_entities(text):
     return replace_once(text, '    pub(super) fn control_block_define(', addition + '    pub(super) fn control_block_define(')
 
 
+def transform_recent(text):
+    before = '''    let window = web_sys::window().ok_or_else(|| "browser window unavailable".to_string())?;
+    let root = JsFuture::from(window.navigator().storage().get_directory())
+        .await
+        .map_err(js_error)?
+        .dyn_into::<web_sys::FileSystemDirectoryHandle>()
+        .map_err(js_error)?;'''
+    text = replace_once(text, before, '    let root = storage_root().await?;')
+    return text + '\n' + Path(__file__).with_name('cad-browser-storage.rs').read_text(encoding='utf-8')
+
+
+def transform_autosave(text):
+    before = '''    let window = web_sys::window().ok_or_else(|| "browser window unavailable".to_string())?;
+    let root = JsFuture::from(window.navigator().storage().get_directory())
+        .await
+        .map_err(super::web_recent::js_error)?
+        .dyn_into::<web_sys::FileSystemDirectoryHandle>()
+        .map_err(super::web_recent::js_error)?;'''
+    return replace_once(text, before, '    let root = super::web_recent::storage_root().await?;')
+
+
+def transform_cache_notice(text):
+    # FileOpened still installs the parsed document (or reports a genuine parse
+    # failure). An optional recent-copy failure must not increment the global
+    # command error revision and turn a successful control-open into a failure.
+    for message in ('Opened drawing, but recent copy could not be stored: {error}',
+                    'Saved download, but recent copy could not be stored: {error}'):
+        index = text.index('"' + message + '"')
+        start = text.rfind('self.command_line.push_error(', 0, index)
+        if start < 0 or index - start > 150:
+            raise ValueError('Upstream cache notice changed')
+        text = text[:start] + text[start:index].replace('push_error(', 'push_info(', 1) + text[index:]
+    return text
+
+
+def transform_persistence_request(text):
+    return replace_once(text, '''        if let Some(window) = web_sys::window() {
+            if let Ok(promise) = window.navigator().storage().persist() {
+                let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+            }
+        }''', '        crate::io::web_recent::request_persistence().await;')
+
+
 def prepare(root):
     root = Path(root).resolve()
     actual = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     if actual != UPSTREAM:
         raise ValueError("The CAD source must match pinned commit " + UPSTREAM)
     changes = {}
-    for relative, transform in zip(FILES, (transform_view, transform_control, transform_worker, transform_entities)):
+    for relative, transform in zip(FILES, (transform_view, transform_control, transform_worker, transform_entities, transform_recent, transform_autosave, transform_cache_notice, transform_persistence_request)):
         path = root / relative
         original = path.read_bytes()
         digest = hashlib.sha256(original).hexdigest()

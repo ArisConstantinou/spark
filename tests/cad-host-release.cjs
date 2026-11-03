@@ -8,6 +8,7 @@ function check(value,label){assert(value,label);report.checks.push(label);consol
  let ready=false;for(let n=0;n<100;n++){try{if((await fetch('http://127.0.0.1:5173/api/health')).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,100));}check(ready&&server.exitCode===null,'The owned host test server binds the fixed project port');
  browser=await chromium.launch({headless:true,args:['--force-device-scale-factor=2']});
  await require('./cad-workspace.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',fixture:path.resolve('.out/layer-fixture.dwg'),out,check});
+ await require('./cad-browser-storage.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',fixture:path.resolve('.out/layer-fixture.dwg'),check});
  report.serverLog=serverLog;report.status='PASS';
 })().catch(error=>{report.status='FAIL';report.failure=error.stack;process.exitCode=1;}).finally(async()=>{
  await browser?.close();if(server&&server.exitCode===null){server.kill();await new Promise(resolve=>server.once('exit',resolve));}
