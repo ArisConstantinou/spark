@@ -53,7 +53,14 @@ jobs:
       - name: Generate the authored public CAD fixtures from source
         run: |
           dotnet run --project cad-tests/SparkWorld.CadTests.csproj -c Release -- --fixture .out/cad-fixture.dwg
-          dotnet run --no-build --project cad-tests/SparkWorld.CadTests.csproj -c Release -- --mtext-fixture .out/mtext-frame-fixture.dwg
+          dotnet run --no-build --project cad-tests/SparkWorld.CadTests.csproj -c Release -- --mtext-fixture .out/mtext-frame-fixture.dxf
+          dotnet run --no-build --project cad-tests/SparkWorld.CadTests.csproj -c Release -- --mtext-fixture .out/mtext-frame-reader-fixture.dwg
+      - name: Retain only the authored regression inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: mtext-authored-fixtures
+          path: .out/mtext-frame-*.d*
+          retention-days: 3
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
