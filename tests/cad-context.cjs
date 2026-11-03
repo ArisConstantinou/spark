@@ -26,6 +26,18 @@ module.exports=async function({browser,baseUrl,fixture,out,check,preparePage}){
   const dimensions=await page.locator('.cad-context-actions button').evaluateAll(elements=>elements.map(e=>({height:e.getBoundingClientRect().height,font:parseFloat(getComputedStyle(e).fontSize)})));check(dimensions.every(d=>d.height>=44&&d.font>=14),'Owned context targets and labels meet readable minimums');
   await page.screenshot({path:path.join(out,'cad-context-desktop.png')});await page.keyboard.press('Escape');check(!await page.locator('.cad-context-menu').isVisible(),'Escape dismisses the owned menu');
   await open(false,true);check(await page.locator('.cad-context-menu').isVisible(),'A context click waits for a concurrent save to release the canvas');await page.keyboard.press('Escape');
+  // A real automatic save can start after Playwright's actionability check.
+  // Hold only its save request so the actual pointer event reaches the inert
+  // frame's parent, as recorded by the failed main-run event trace.
+  await page.evaluate(()=>{window.contextOriginalMutation=sparkCadStudio.mutation;sparkCadStudio.mutation=async request=>{if(request.op==='save'&&!window.contextSaveHeld){window.contextSaveHeld=true;await new Promise(resolve=>window.releaseContextSave=resolve);}return contextOriginalMutation(request);};});
+  await cad({op:'entities_create',entities:[{type:'Line',start:[-20,-20,0],end:[-10,-10,0]}]},true);
+  await page.waitForFunction(()=>window.contextSaveHeld&&sparkWorkspace.busy&&document.querySelector('#cad-frame').inert,{},{timeout:15000});
+  const blockedFrame=await page.locator('#cad-frame').boundingBox();await page.mouse.click(blockedFrame.x+blockedFrame.width/2,blockedFrame.y+blockedFrame.height/2,{button:'right'});
+  check(!await page.locator('.cad-context-menu').isVisible(),'A drawing menu waits while the actual automatic save owns the document');
+  const heldCount=(await cad({op:'query',type:'Line',limit:1})).count;await page.evaluate(()=>releaseContextSave());await page.locator('.cad-context-menu').waitFor({state:'visible',timeout:10000});
+  check(true,'A right click during automatic save opens the owned menu once saving finishes');check((await cad({op:'query',type:'Line',limit:1})).count===heldCount&&!(await cad({op:'state'})).command,'Deferred menu opening does not replay a geometry edit or CAD command');await page.keyboard.press('Escape');
+  await page.evaluate(()=>window.contextSaveHeld=false);await cad({op:'entities_create',entities:[{type:'Line',start:[-40,-40,0],end:[-30,-30,0]}]},true);await page.waitForFunction(()=>window.contextSaveHeld&&sparkWorkspace.busy&&document.querySelector('#cad-frame').inert,{},{timeout:15000});
+  const cancelFrame=await page.locator('#cad-frame').boundingBox();await page.mouse.click(cancelFrame.x+cancelFrame.width/2,cancelFrame.y+cancelFrame.height/2,{button:'right'});await page.keyboard.press('Escape');await page.evaluate(()=>releaseContextSave());await page.waitForFunction(()=>!sparkWorkspace.busy);await page.waitForTimeout(100);check(!await page.locator('.cad-context-menu').isVisible(),'Escape cancels a deferred menu before automatic saving finishes');await page.evaluate(()=>sparkCadStudio.mutation=contextOriginalMutation);
   const before=(await cad({op:'query',type:'Line',limit:1})).count;
   await cad({op:'entities_create',entities:[{type:'Line',start:[10,10,0],end:[20,20,0]}]},true);
   await open();await action('undo');check((await cad({op:'query',type:'Line',limit:1})).count===before,'Context Undo restores the actual native entity count');

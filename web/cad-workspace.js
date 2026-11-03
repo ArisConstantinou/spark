@@ -153,6 +153,7 @@ nativeControls=await mountCadControls({read,write:mutate,task,save:saveCurrent,d
 nativeControls.update(nativeState);
 const inner=$('#cad-frame').contentWindow;
 installCadContextMenu({inner,frame:$('#cad-frame'),state:()=>read({op:'state'}),enabled:()=>!!nativeState?.hosted_view&&!busy&&!nativeState.modal&&!nativeState.block_editor,
+ defer:()=>nativeState?.hosted_view&&currentOperation?.background?{done:currentOperation.done,documentId:currentId}:null,
  onError:error=>toast(error.message),act:async(id,pinned)=>{
   const state=await read({op:'state'});if(state.document_id!==pinned.documentId)throw Error('The active drawing changed. Open the menu again.');
   if(state.command?.name!==pinned.command||JSON.stringify(state.selection)!==JSON.stringify(pinned.selection))throw Error('The command or selection changed. Open the menu again.');

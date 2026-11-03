@@ -8,6 +8,8 @@ Before: the engine's context menu remained visible inside the workspace.
 
 After: drawing actions use SparkWorld controls and native document operations. The menu reads the current native selection when opened. Active commands expose Accept and Cancel. Details requires a selection; Layers and UI Settings open the existing owned panels. Typed `LAYER`, `PROPERTIES` and `OPTIONS` use the same panels.
 
+During automatic saving, a canvas right click waits for the same drawing to become available, then opens the menu. It does not replay an editing click. Escape cancels that pending request.
+
 ![After](after.png)
 
 The menu also stays inside a narrow 320 × 580 viewport.
