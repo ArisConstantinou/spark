@@ -101,6 +101,59 @@ def trace_resident_geometry(source):
     return within(source, "    fn resident_wires_for(", "    fn resident_wire_key(", transform)
 
 
+def trace_wire_assembly(source):
+    def transform(body):
+        # WASM's parallel iterator is serial. Stream each new wire run into the
+        # existing materializer instead of first retaining a second full set.
+        start = "            let miss_pairs: Vec<(Handle, Arc<Vec<WireModel>>)> = misses"
+        end = "            // Materialize new wires while the memo retains their shared source."
+        begin = body.index(start)
+        finish = body.index(end, begin)
+        original = body[begin:finish]
+        closure = original[original.index("                    let e: &EntityType = e;"):
+                           original.index("                    (e.common().handle, Arc::new(w))")]
+        closure = "".join(line[4:] for line in closure.splitlines(keepends=True))
+        streamed = '''            #[cfg(target_arch = "wasm32")]
+            let mut streamed_tess_ms = 0.0;
+            #[cfg(target_arch = "wasm32")]
+            let miss_pairs = misses.iter().map(|e| {
+                let started = perf.then(iced::time::Instant::now);
+'''+closure+'''                streamed_tess_ms += crate::perf::elapsed_ms(started);
+                (e.common().handle, w)
+            });
+'''
+        native = original.replace("            let miss_pairs:",
+                                  '            #[cfg(not(target_arch = "wasm32"))]\n            let miss_pairs:', 1)
+        native = native.replace("            tess_ms = crate::perf::elapsed_ms(t_tess_miss);",
+                                '            #[cfg(not(target_arch = "wasm32"))]\n'
+                                '            { tess_ms = crate::perf::elapsed_ms(t_tess_miss); }', 1)
+        body = body[:begin] + native + streamed + body[finish:]
+        native_timer = "            let t_tess_miss = perf.then(iced::time::Instant::now);"
+        body = body.replace(native_timer, '            #[cfg(not(target_arch = "wasm32"))]\n'+native_timer, 1)
+        original_materialize = "                    let mut wires = Arc::try_unwrap(a).unwrap_or_else(|a| a.as_ref().clone());"
+        body = body.replace(original_materialize,
+                            '                    #[cfg(target_arch = "wasm32")]\n                    let mut wires = a;\n'
+                            '                    #[cfg(not(target_arch = "wasm32"))]\n'+original_materialize, 1)
+        end_materialize = "            materialize_ms = crate::perf::elapsed_ms(t_materialize);"
+        body = body.replace(end_materialize, end_materialize+'''
+            #[cfg(target_arch = "wasm32")]
+            {
+                tess_ms = streamed_tess_ms;
+                materialize_ms = (materialize_ms - streamed_tess_ms).max(0.0);
+            }''', 1)
+        for anchor, phase in (
+            ("        let t_visible = perf.then(iced::time::Instant::now);", "wire-visibility-start"),
+            ("        let blk_cache =", "wire-block-cache-start"),
+            ("        let blk_ms = crate::perf::elapsed_ms(t_blk);", "wire-block-cache-finished"),
+            ("            let mut out = hit_wires;", "wire-materialize-start"),
+            ("        let build_ms = crate::perf::elapsed_ms(t_build);", "wire-assembly-finished"),
+        ):
+            body = mark_large_frame(body, anchor, phase, "self")
+        return body
+
+    return within(source, "    fn wires_for_block_culled<'doc>(", "    fn unindexable_handles(", transform)
+
+
 def trace_viewport(source):
     def transform(body):
         body = mark_large_frame(body, "        match self.pane {", "viewport-primitive-start", "self.scene")
@@ -116,7 +169,8 @@ def trace_viewport(source):
 
 def prepare(root):
     changes = {}
-    transforms = (trace_worker, trace_load, trace_install, trace_resident_geometry, trace_viewport)
+    transforms = (trace_worker, trace_load, trace_install,
+                  lambda source: trace_wire_assembly(trace_resident_geometry(source)), trace_viewport)
     for (relative, digest), transform in zip(SOURCES.items(), transforms, strict=True):
         path = root / relative
         raw = path.read_bytes()
