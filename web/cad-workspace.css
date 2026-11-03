@@ -12,6 +12,15 @@
 .cad-workspace-page .studio-heading>#studio-document:not([hidden]){display:block;min-width:0;flex:1}
 .cad-workspace-page .studio-footer>span:first-child{display:none}
 .cad-workspace-page #studio-operation{flex:1;text-align:right}
+.cad-import-progress{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:20px;background:#06121eeb;overflow:auto}
+.cad-import-card{width:min(540px,100%);padding:28px;border:1px solid #355675;border-radius:18px;background:linear-gradient(145deg,#162b3d,#10202f);box-shadow:0 24px 80px #0007}
+.cad-import-heading{display:flex;align-items:center;gap:14px}.cad-import-heading .spinner{width:27px;height:27px;margin:0;flex-shrink:0}
+.cad-import-card h1{font-size:28px;margin:20px 0}.cad-import-file{display:flex;align-items:center;gap:14px;padding:16px;background:#0b1d2d;border:1px solid #2b4b66;border-radius:10px}
+.cad-import-file svg{width:34px;height:34px;fill:none;stroke:#69b5ff;stroke-width:1.5;flex-shrink:0}.cad-import-file div{min-width:0;display:grid;gap:6px}.cad-import-file strong{font-size:16px;overflow-wrap:anywhere}.cad-import-file span{font-size:14px;color:#a6bed2}
+.cad-import-card ol{display:flex;gap:10px;list-style:none;padding:0;margin:24px 0}.cad-import-card li{flex:1;border-top:3px solid #354c60;padding-top:10px;font-size:14px;color:#91a7bb}.cad-import-card li[data-state=current]{border-color:#258dff;color:#e9f4ff}.cad-import-card li[data-state=done]{border-color:#47caa0;color:#9be4c9}
+.cad-import-card h2{font-size:20px;line-height:1.4;margin:0 0 10px}.cad-import-detail{font-size:16px;line-height:1.6;color:#b4c9da;min-height:76px;margin:0}.cad-import-bottom{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:18px}.cad-import-bottom span{font-size:14px;color:#9cb4ca}.cad-import-bottom button{min-height:44px;font-size:14px}.cad-import-privacy{font-size:14px;color:#82a2bc;border-top:1px solid #2b465d;padding-top:16px;margin-bottom:0}
+@media(max-width:580px){.cad-import-progress{padding:16px}.cad-import-card{padding:22px 18px}.cad-import-card h1{font-size:25px}.cad-import-card ol{gap:8px}.cad-import-card li{font-size:13px}.cad-import-detail{min-height:92px}}
+@media(prefers-reduced-motion:reduce){.cad-import-progress .spinner{animation:none}}
 .cad-own-documents{display:flex;align-items:center;flex:1;min-width:0;height:44px}
 .cad-own-documents[hidden]{display:none}
 .cad-document-tabs{display:flex;align-items:center;gap:6px;min-width:0;flex:1;overflow:auto;scrollbar-width:thin}
