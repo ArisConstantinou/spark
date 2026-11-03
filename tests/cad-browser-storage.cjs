@@ -19,7 +19,7 @@ module.exports=async function verifyBrowserStorage({browser,baseUrl,fixture,chec
    const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));await page.goto(baseUrl);
    await page.waitForFunction(()=>window.sparkWorkspace?.ready,{},{timeout:120000});
    async function ready(){for(let n=0;n<4;n++){
-    const result=await page.waitForFunction(()=>document.querySelector('#dialog')?.open&&document.querySelector('#dialog-title')?.textContent==='CAD graphics notice'?'graphics':sparkWorkspace.project?.original&&sparkWorkspace.project?.working&&!sparkWorkspace.busy?'ready':false,{},{timeout:120000});
+    const result=await page.waitForFunction(()=>document.querySelector('#dialog')?.open&&document.querySelector('#dialog-title')?.textContent==='CAD graphics notice'?'graphics':window.sparkWorkspace?.project?.original&&sparkWorkspace.project?.working&&!sparkWorkspace.busy?'ready':false,{},{timeout:120000});
     if(await result.jsonValue()==='ready')return;
     const state=await page.evaluate(()=>sparkWorkspace.read({op:'state'}));check(/GpuWarning/.test(JSON.stringify(state.modal)),mode+': only the known graphics notice is acknowledged');
     await page.getByRole('button',{name:'Continue with software rendering',exact:true}).click();
@@ -32,7 +32,7 @@ module.exports=async function verifyBrowserStorage({browser,baseUrl,fixture,chec
    const restored=await page.evaluate(async()=>({source:sparkWorkspace.project.original.data,name:sparkWorkspace.project.name,count:(await sparkWorkspace.read({op:'query',limit:1})).count}));
    check(restored.source===data&&restored.name==='storage-fixture'&&restored.count===count,mode+': saved-project reload restores geometry and source through real IndexedDB without OPFS');
    check(!errors.length,mode+': no unhandled JavaScript exception or WebAssembly panic');
-  }finally{await context.close();}
+  }catch(error){throw new Error(mode+': '+error.message+'; browserErrors='+JSON.stringify(errors),{cause:error});}finally{await context.close();}
  }
  check(crypto.createHash('sha256').update(await fs.readFile(fixture)).digest('hex')===hash,'Storage regression tests preserve the original fixture bytes');
 };
