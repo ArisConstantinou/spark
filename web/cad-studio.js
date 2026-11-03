@@ -4,7 +4,7 @@ import {pendingCadFile,consumeCadFile} from './cad-transfer.js';
 import {setupDesktop} from './desktop-ui.js';
 import {desktop} from './platform.js';
 // A new viewport API must not reuse a cached index from an older component.
-const CAD_CORE='f78bf7a58a18728a1ae27c22d143c1f63f823674';
+const CAD_CORE='8f5d9e79e013739c116b3678f51f1f77c850760b';
 import {escape as esc} from './model.js';
 const $=s=>document.querySelector(s),frame=$('#cad-frame');
 const unifiedWeb=!desktop&&document.body.dataset.sparkWorkspace==='cad';
@@ -23,7 +23,27 @@ async function task(label,fn){if(busy)throw Error('Wait for the current CAD oper
 function encode(bytes){let text='';for(let i=0;i<bytes.length;i+=32768)text+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(text);}
 function decode(text){return Uint8Array.from(atob(text),c=>c.charCodeAt(0));}
 async function deliver(bytes,name){if(desktopUi)return desktopUi.saveData(bytes,name,'application/octet-stream');const url=URL.createObjectURL(new Blob([bytes],{type:'application/octet-stream'})),a=document.createElement('a');a.href=url;a.download=name;a.hidden=true;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);return true;}
-async function importFile(file,{dataBase64,onOpened}={}){if(!file)return false;const format=file.name.split('.').at(-1).toLowerCase();if(!['dwg','dxf'].includes(format))throw Error('Choose a DWG or DXF drawing.');if(!file.size||file.size>48*1024*1024)throw Error('Choose a non-empty drawing up to 48 MiB.');return task('Opening '+file.name+' locally…',async()=>{await mutation({op:'open',name:file.name,data_base64:dataBase64??encode(new Uint8Array(await file.arrayBuffer()))},{timeoutMs:unifiedWeb?600000:120000});const opened=await read({op:'state'});onOpened?.(opened);importNames.set(opened.document_id,file.name);sourceName=file.name;await mutation({op:'action',name:'zoom_extents'});$('#studio-operation').textContent='Opened locally · original file retained';return true;});}
+async function importFile(file,{dataBase64,onOpened,initialLayout}={}){
+ if(!file)return false;
+ const format=file.name.split('.').at(-1).toLowerCase();
+ if(!['dwg','dxf'].includes(format))throw Error('Choose a DWG or DXF drawing.');
+ if(!file.size||file.size>48*1024*1024)throw Error('Choose a non-empty drawing up to 48 MiB.');
+ return task('Opening '+file.name+' locally…',async()=>{
+  const request={op:'open',name:file.name,data_base64:dataBase64??encode(new Uint8Array(await file.arrayBuffer()))};
+  if(unifiedWeb&&initialLayout)request.initial_layout=initialLayout;
+  await mutation(request,{timeoutMs:unifiedWeb?600000:120000});
+  const opened=await read({op:'state'});
+  onOpened?.(opened);
+  importNames.set(opened.document_id,file.name);
+  sourceName=file.name;
+  // The new engine restores the requested layout's camera or fits the
+  // drawing itself when the file has no saved camera.
+  const restoredInitialView=initialLayout&&opened.hosted_initial_layout&&opened.layout===initialLayout;
+  if(!restoredInitialView)await mutation({op:'action',name:'zoom_extents'});
+  $('#studio-operation').textContent='Opened locally · original file retained';
+  return true;
+ });
+}
 async function save(){if(!api||busy)return false;return task('Writing native DWG…',async()=>{const current=await read({op:'state'}),active=current.documents.find(d=>d.id===current.document_id);if(!active||active.start)throw Error('Open or create a drawing first.');const name=(importNames.get(active.id)||active.path?.split(/[\\/]/).at(-1)||active.title||'Drawing').replace(/\.(dwg|dxf)$/i,'')+'-sparkworld.dwg';pendingDownloads.add(active.id);const envelope=await mutation({op:'save',name,target_format:'dwg',target_version:'AC1032'}),reply=envelope.result||envelope;if(reply.dropped_on_save)throw Error('The engine reports dropped records. Keep the source and review the drawing before saving.');if(typeof reply.data_base64!=='string'||!reply.data_base64.length)throw Error('The CAD engine returned no drawing bytes.');const bytes=decode(reply.data_base64);if(new TextDecoder().decode(bytes.subarray(0,6))!=='AC1032')throw Error('The returned file is not the requested DWG 2018 format.');const saved=await deliver(bytes,name);if(saved===false){$('#studio-operation').textContent='Save cancelled · changes still need a copy';return false;}pendingDownloads.delete(active.id);$('#studio-operation').textContent=desktop?'DWG copy saved · original retained':'DWG copy sent to browser downloads · verify the download';return true;});}
 async function leave(){await refresh();if(dirty()&&!await confirmAction('One or more CAD drawings have changes without a saved copy. Save each drawing before leaving if you want to keep those changes.',{title:'Leave CAD Studio?',confirmLabel:'Leave without saving'}))return;try{frame.contentWindow.onbeforeunload=null;}catch{}disposed=true;location.href='./';}
 async function toggleCanvas(){const reply=await task('Changing the CAD workspace view…',()=>mutation({op:'run',cmd:'CLEANSCREEN'}));if(reply.status==='waiting_input'){initialLayoutPending=true;return false;}narrowCanvas=!narrowCanvas;$('#cad-nav').title=narrowCanvas?'Show CAD tool panels':'Focus CAD canvas';$('#cad-nav').setAttribute('aria-label',$('#cad-nav').title);}

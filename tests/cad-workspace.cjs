@@ -16,8 +16,25 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  page=await context.newPage();await preparePage?.(page,context);page.setDefaultTimeout(30000);page.on('pageerror',e=>report.errors.push(e.message));await page.goto(baseUrl+'?workspace=cad'+(process.env.SPARK_HOSTED_RENDERER==='1'?'&renderer=host':''));await page.waitForFunction(()=>window.sparkWorkspace,{},{timeout:120000});
  const cad=async(request,write=false)=>{let timer;console.log('CAD request '+request.op+(request.cmd?' '+request.cmd:''));try{return await Promise.race([page.evaluate(({request,write})=>write?sparkWorkspace.mutate(request):sparkWorkspace.read(request),{request,write}),new Promise((_,reject)=>timer=setTimeout(()=>reject(Error('Native CAD request timed out: '+request.op)),120000))]);}finally{clearTimeout(timer);}};
  await require('./cad-import.cjs')({page,check});
+ const supportsInitialView=(await cad({op:'state'})).hosted_initial_layout;
+ if(supportsInitialView)await page.evaluate(()=>{
+  const api=document.querySelector('#cad-frame').contentWindow.ocsControl;
+  const request=api.request.bind(api);
+  window.initialViewRequests=[];
+  api.request=(value,options)=>{
+   if(value.op==='open'||value.name==='zoom_extents'){
+    initialViewRequests.push({op:value.op,name:value.op==='action'?value.name:undefined,layout:value.initial_layout});
+   }
+   return request(value,options);
+  };
+ });
  await page.locator('#file-input').setInputFiles(fixture);
  await ready();
+ if(supportsInitialView){
+  check(await page.evaluate(()=>initialViewRequests.some(r=>r.op==='open'&&r.layout==='Model')&&!initialViewRequests.some(r=>r.name==='zoom_extents')),'Hosted import lets the native engine choose the initial Model camera');
+  const fitted=await cad({op:'state'});
+  check(fitted.layout==='Model'&&fitted.camera.distance>100,'Native open fits the fixture geometry when its saved Model camera is the CAD default');
+ }
  const initial=await page.evaluate(()=>sparkWorkspace.project);report.initial={name:initial.name,definitions:Object.keys(initial.definitions.blocks).length,originalFormat:initial.original?.format};
  check(Object.keys(initial.definitions.blocks).length===0,'Opening a source drawing does not seed unused library geometry or history');
  check((await cad({op:'state'})).documents.filter(d=>!d.start).length===1,'Opening keeps one working native drawing without a preparation copy');
