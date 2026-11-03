@@ -60,9 +60,11 @@ module.exports=async function verifyAnnotations({page,cad,check,out}){
  await page.setViewportSize({width:1440,height:1000});
  await cad({op:'select',handles:[entity.handle]},true);await page.waitForFunction(handle=>sparkWorkspace.selection?.handle===handle,entity.handle);
  const camera=(await cad({op:'state'})).camera,box2=await page.locator('#cad-frame').boundingBox(),unit=2*camera.distance*Math.tan(camera.fov_y/2)/box2.height;
- await page.mouse.dblclick(box2.x+box2.width/2+(110-camera.target[0])/unit,box2.y+box2.height/2-(210-camera.target[1])/unit,{delay:100});
+ // Slow event delivery must still honor the browser's recognized double-click.
+ await page.mouse.dblclick(box2.x+box2.width/2+(110-camera.target[0])/unit,box2.y+box2.height/2-(210-camera.target[1])/unit,{delay:300});
  await page.waitForFunction(()=>document.querySelector('#dialog').open&&document.querySelector('#dialog-title').textContent==='CAD properties');
  state=await cad({op:'state'});check(!state.text_editor&&!state.mtext_editor,'Mouse double-click opens owned Details instead of the native text window');
+ await page.screenshot({path:path.join(out,'cad-doubleclick-after.png')});
  await page.locator('#dialog-close').click();
  await page.locator('#cad-tool-group-toggle').click();await page.locator('[data-cad-tab="Draw"]').click();
 };
