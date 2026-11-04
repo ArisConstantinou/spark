@@ -119,3 +119,6 @@
 .cad-project-delete svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .cad-project-delete:hover{background:#4a2932;border-color:#e07b80}
 .cad-project-delete:focus-visible{outline:2px solid #75b8ff;outline-offset:2px}
+
+#dialog.cad-load-confirmation .dialog-actions{display:flex;flex-direction:column;gap:10px}
+#dialog.cad-load-confirmation .dialog-actions button{width:100%;min-height:44px;white-space:normal}

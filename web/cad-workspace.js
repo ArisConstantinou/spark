@@ -10,6 +10,7 @@ import {installCadContextMenu} from './cad-context-menu.js';
 import {drawingLoader,readDrawing,readSelectedFile,interruptedImport,clearInterruptedImport} from './cad-loading.js';
 const $=s=>document.querySelector(s),delay=ms=>new Promise(r=>setTimeout(r,ms));
 const projects=new Map(),adapters=new Map();let currentId,project,busy=false,panel=null,chosen=null,activeCircuit='',lastSelection='',selection=null,lastRevision=-1,saveTimer,pollSerial=0,placementDocumentId=null;
+const savedOpenAttempts=new Map();
 const api=()=>window.sparkCadStudio;
 const read=request=>api().read(request);
 const mutate=request=>api().mutation(request);
@@ -17,11 +18,11 @@ let serial=0,nativeControls=null,welcome=null,cadGestures=null,nativeState=null,
 let graphicsConsent=null,catalogue=null,catalogueRender=0;
 const activate=id=>read({op:'activate',document_id:id,request_id:'workspace-activate-'+ ++serial});
 function toast(message){$('#toast').textContent=message;$('#toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').hidden=true,6000);}
-function dialog(title,body,actions=[]){$('#dialog-title').textContent=title;$('#dialog-body').innerHTML=body;$('#dialog-actions').replaceChildren();for(const action of actions){const b=document.createElement('button');b.type='button';b.textContent=action.label;b.className=action.primary?'primary':'';b.onclick=()=>Promise.resolve().then(()=>action.run()).then(result=>{if(result!==false)$('#dialog').close();}).catch(e=>toast(e.message));$('#dialog-actions').append(b);}if(!$('#dialog').open)$('#dialog').showModal();}
+function dialog(title,body,actions=[]){$('#dialog').classList.toggle('cad-load-confirmation',['Project already open','Previous opening did not finish','Reset workspace?','Reset and reload this project?'].includes(title));$('#dialog-title').textContent=title;$('#dialog-body').innerHTML=body;$('#dialog-actions').replaceChildren();for(const action of actions){const b=document.createElement('button');b.type='button';b.textContent=action.label;b.className=action.primary?'primary':'';b.onclick=()=>{if(action.closeFirst)$('#dialog').close();Promise.resolve().then(()=>action.run()).then(result=>{if(!action.closeFirst&&result!==false)$('#dialog').close();}).catch(e=>toast(e.message));};$('#dialog-actions').append(b);}if(!$('#dialog').open)$('#dialog').showModal();}
 async function task(label,fn,{background=false,loading=null,restoring=false}={}){
  const requestedDocument=currentId;if(currentOperation?.background){await currentOperation.done;if(currentId!==requestedDocument)throw Error('The drawing changed while waiting for automatic save.');}
  if(busy||cadGestures?.active)throw Error('Wait for the current drawing operation or touch gesture.');let finish;const operation={background,done:new Promise(resolve=>finish=resolve)};currentOperation=operation;busy=true;pollSerial++;$('#studio-operation').textContent=label;$('#cad-frame').inert=true;
- const progress=loading?drawingLoader(loading,{restoring}):null;
+ const progress=loading?drawingLoader(loading,{restoring,onReset:()=>confirmWorkspaceReset()}):null;
  try{return await fn(progress);}finally{progress?.finish();try{await poll(true);}finally{busy=false;$('#cad-frame').inert=false;if(currentOperation===operation)currentOperation=null;finish();}}
 }
 const download=(value,name,mime='application/octet-stream')=>{const bytes=typeof value==='string'?new TextEncoder().encode(value):value;return api().deliver(bytes,name,mime);};
@@ -34,8 +35,8 @@ function bindDocument(state,metadata=null){const d=currentDocument(state);if(!d)
 async function factorFromDrawing(){const envelope=await mutate({op:'sysvar',get:['insunits']}),units=(envelope.result||envelope).values?.insunits;project.units=Number(units);project.factor=({1:25.4,2:304.8,4:1,5:10,6:1000,7:1e6})[project.units]||1;project.unitsConfirmed=[1,2,4,5,6].includes(project.units);}
 async function rememberSourceLayers(){const rows=(await read({op:'records',collection:'layers',limit:10000})).records;project.sourceLayers=Object.fromEntries(rows.map(row=>[row.name,structuredClone(row.properties.flags)]));}
 async function snapshot(){const state=await read({op:'state'});if(!bindDocument(state))throw Error('Open or create a drawing first.');if(state.command||state.modal)throw Error('Finish or cancel the CAD command and close any notice before saving.');const envelope=await mutate({op:'save',name:filename('dwg'),target_format:'dwg',target_version:'AC1032'}),data=envelope.result||envelope;if(data.dropped_on_save||typeof data.data_base64!=='string'||atob(data.data_base64.slice(0,8))!=='AC1032')throw Error('The native CAD engine could not provide a verified DWG 2018 copy.');project.working={name:filename('dwg'),format:'dwg',data:data.data_base64};project.savedRevision=state.revision;project.activeLayout=state.layout;project.updated=new Date().toISOString();return project;}
-async function saveCurrent(){const state=await read({op:'state'});if(state.command||state.modal)throw Error('Finish or cancel the CAD command and close any notice before saving.');if(!project?.working||state.document_id!==currentId||state.revision!==project.savedRevision||state.layout!==project.activeLayout)await snapshot();project.updated=new Date().toISOString();await projectStore.save(project);catalogue=null;project.dirty=false;localStorage.setItem('sparkworld-cad-active',project.id);$('#studio-operation').textContent='CAD geometry, circuits and notes saved together on this device';return project;}
-async function saveAll(){const state=await read({op:'state'}),selected=state.document_id;for(const d of state.documents.filter(d=>!d.start)){if(d.id!==(await read({op:'state'})).document_id)await activate(d.id);bindDocument(await read({op:'state'}));await saveCurrent();}if(state.documents.some(d=>d.id===selected))await activate(selected);bindDocument(await read({op:'state'}));}
+async function saveCurrent(){if(savedOpenAttempts.get(project?.id)?.status==='failed')throw Error('The previous opening did not finish. Replace or reset that drawing before saving it.');const state=await read({op:'state'});if(state.command||state.modal)throw Error('Finish or cancel the CAD command and close any notice before saving.');if(!project?.working||state.document_id!==currentId||state.revision!==project.savedRevision||state.layout!==project.activeLayout)await snapshot();project.updated=new Date().toISOString();await projectStore.save(project);catalogue=null;project.dirty=false;localStorage.setItem('sparkworld-cad-active',project.id);$('#studio-operation').textContent='CAD geometry, circuits and notes saved together on this device';return project;}
+async function saveAll(){const state=await read({op:'state'}),selected=state.document_id;for(const d of state.documents.filter(d=>!d.start&&savedOpenAttempts.get(projects.get(d.id)?.id)?.status!=='failed')){if(d.id!==(await read({op:'state'})).document_id)await activate(d.id);bindDocument(await read({op:'state'}));await saveCurrent();}if(state.documents.some(d=>d.id===selected))await activate(selected);bindDocument(await read({op:'state'}));}
 async function compact(){while(api().busy)await delay(50);if(!api().compact)await api().toggleCanvas();}
 async function definitions(){
  if(!project)throw Error('Open or create a drawing first.');
@@ -50,10 +51,20 @@ async function definitions(){
 async function switchDocument(id){return task('Switching drawing…',async()=>{const state=await read({op:'state'});if(state.document_id===id)return;if(!state.documents.some(d=>d.id===id&&!d.start))throw Error('The drawing is no longer open.');if(project)await saveCurrent();await activate(id);bindDocument(await read({op:'state'}));localStorage.setItem('sparkworld-cad-active',project.id);});}
 async function setLayout(name){const state=await read({op:'state'});if(state.command||state.modal)throw Error('Finish the active command before changing layouts.');await mutate({op:'start',cmd:'-LAYOUT'});await mutate({op:'input',kind:'token',text:'SET'});await mutate({op:'input',kind:'text',text:name});const next=await read({op:'state'});if(next.command||next.layout!==name)throw Error('The CAD engine did not activate the requested layout.');}
 async function switchLayout(name){return task('Changing drawing layout…',async()=>{await setLayout(name);await saveCurrent();});}
+function savedDocuments(id,state){return state.documents.filter(document=>!document.start&&(projects.get(document.id)?.id===id||savedOpenAttempts.get(id)?.documentId===document.id));}
+async function closeSavedDocuments(id){
+ clearTimeout(saveTimer);saveTimer=null;
+ for(const document of savedDocuments(id,await read({op:'state'}))){
+  await read({op:'close',document_id:document.id,discard:true,request_id:'workspace-close-'+ ++serial});
+  if((await read({op:'state'})).documents.some(value=>value.id===document.id))throw Error('The previous drawing could not be closed. It has not been loaded again.');
+  projects.delete(document.id);adapters.delete(document.id);
+ }
+ savedOpenAttempts.delete(id);
+ bindDocument(await read({op:'state'}));
+}
 async function openProject(saved,reuse=false,progress=null){
  validateProject(saved,{clone:false});
  await reviewGraphics();
- await saveAll();
  if(reuse){
   const state=await read({op:'state'});
   const existing=[...projects].find(([id,p])=>p.id===saved.id&&state.documents.some(d=>d.id===id&&!d.start));
@@ -66,9 +77,16 @@ async function openProject(saved,reuse=false,progress=null){
    return;
   }
  }
+ await saveAll();
  await progress?.stage(1,'Opening the saved CAD drawing','Reading geometry, layers and blocks. Complex drawings can take longer.');
  const wantedLayout=saved.activeLayout||'Model';
- await api().importFile(savedDrawingFile(saved),{dataBase64:saved.working.data,initialLayout:wantedLayout});
+ const before=new Set((await read({op:'state'})).documents.map(document=>document.id));
+ const attempt={status:'opening',documentId:null};savedOpenAttempts.set(saved.id,attempt);
+ try{
+ await api().importFile(savedDrawingFile(saved),{dataBase64:saved.working.data,initialLayout:wantedLayout,onOpened:state=>{
+  attempt.documentId=state.document_id;
+  bindDocument(state,saved);
+ }});
  await reviewGraphics();
  await progress?.stage(2,'Restoring project settings','Restoring layout, units, circuits and electrical notes.');
  const state=await read({op:'state'});
@@ -80,10 +98,46 @@ async function openProject(saved,reuse=false,progress=null){
  await compact();
  project.savedRevision=(await read({op:'state'})).revision;
  project.dirty=false;
+ attempt.status='ready';
  closePanel();
  localStorage.setItem('sparkworld-cad-active',project.id);
+ }catch(error){
+  attempt.status='failed';
+  const state=await read({op:'state'}).catch(()=>null);
+  const created=state?.documents.filter(document=>!document.start&&!before.has(document.id));
+  if(created?.length===1){attempt.documentId=created[0].id;projects.set(created[0].id,saved);}
+  throw error;
+ }
 }
-function restoreStoredProject(id,file,alreadyRead=null){return task('Restoring project…',async progress=>{await progress.stage(0,'Reading the saved project','Retrieving the selected drawing from this device.');const saved=alreadyRead??await projectStore.get(id);if(!saved)throw Error('The saved drawing was not found.');await openProject(saved,true,progress);},{loading:file,restoring:true});}
+function confirmWorkspaceReset(id=null){
+ dialog(id?'Reset and reload this project?':'Reset workspace?',`<p class="dialog-copy">Restart the drawing engine and close all open drawings. Unsaved changes will be discarded.</p><p class="dialog-copy">Saved projects and original files stay on this device.${id?' The selected saved project will open in the fresh workspace.':' The workspace will restart empty.'}</p>`,[
+  {label:'Cancel',run:()=>{}},
+  {label:id?'Reset and reload':'Reset workspace',primary:true,run:()=>{clearTimeout(saveTimer);saveTimer=null;if(id)localStorage.setItem('sparkworld-cad-active',id);else localStorage.removeItem('sparkworld-cad-active');clearInterruptedImport();api().restartWorkspace();}},
+ ]);
+}
+async function restoreStoredProject(id,file,alreadyRead=null){
+ if(busy)throw Error('A drawing is already loading or being updated. Wait for that operation before replacing it.');
+ const state=await read({op:'state'}),existing=savedDocuments(id,state),attempt=savedOpenAttempts.get(id);
+ const restore=replace=>task('Restoring project…',async progress=>{
+  await progress.stage(0,'Reading the saved project','Retrieving the selected drawing from this device.');
+  const saved=alreadyRead??await projectStore.get(id);if(!saved)throw Error('The saved drawing was not found.');
+  if(replace)await closeSavedDocuments(id);
+  await openProject(saved,true,progress);
+ },{loading:file,restoring:true});
+ if(existing.length){
+  dialog(attempt?.status==='failed'?'Previous opening did not finish':'Project already open',`<p class="dialog-copy">This project already has a drawing in memory. Return to it, or replace it with the saved copy.</p><p class="dialog-copy">Replacing closes the previous drawing first and discards its unsaved changes.</p>`,[
+   {label:'Cancel',run:()=>{}},
+   {label:'Show existing drawing',closeFirst:true,run:()=>task('Showing the open drawing…',async()=>{await activate(existing[0].id);bindDocument(await read({op:'state'}));closePanel();})},
+   {label:'Replace and reload',primary:true,closeFirst:true,run:()=>restore(true)},
+  ]);
+  return;
+ }
+ if(attempt?.status==='failed'){
+  confirmWorkspaceReset(id);
+  return;
+ }
+ return restore(false);
+}
 function savedProjectRow(saved,legacy=false){
  const kind=legacy?'legacy':'project',description=legacy?(saved.cad?'Import a copy with its electrical data':'Open image / blank drawing'):new Date(saved.updated).toLocaleString();
  return `<div class="cad-project-entry"><button class="cad-project-row" data-${kind}="${esc(saved.id)}"><strong>${esc(saved.name)}</strong><small>${esc(description)}</small></button><button class="cad-project-delete" data-delete-${kind}="${esc(saved.id)}" aria-label="Delete saved project ${esc(saved.name)}" title="Delete saved project"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7"/></svg></button></div>`;
@@ -97,14 +151,7 @@ function confirmProjectRemoval(saved,legacy=false){
     await legacyStorage.remove(saved.id);
     if(localStorage.getItem('fyp-active')===saved.id)localStorage.removeItem('fyp-active');
    }else{
-    clearTimeout(saveTimer);saveTimer=null;
-    const state=await read({op:'state'});
-    const opened=state.documents.filter(document=>!document.start&&projects.get(document.id)?.id===saved.id);
-    for(const document of opened){
-     await mutate({op:'close',document_id:document.id,discard:true});
-     if((await read({op:'state'})).documents.some(value=>value.id===document.id))throw Error('The open drawing could not be closed. The saved project has been kept.');
-     projects.delete(document.id);adapters.delete(document.id);
-    }
+    await closeSavedDocuments(saved.id);
     await projectStore.remove(saved.id);
     if(localStorage.getItem('sparkworld-cad-active')===saved.id)localStorage.removeItem('sparkworld-cad-active');
     bindDocument(await read({op:'state'}));
@@ -188,6 +235,7 @@ function more(){dialog('Drawing actions','<p class="dialog-copy">CAD geometry an
  {label:'Redo CAD edit',run:()=>task('Redoing edit…',()=>mutate({op:'redo'}))},
  {label:'Drawing units',run:()=>{setTimeout(units,0);}},
  {label:'Drawing information',run:()=>{setTimeout(()=>diagnostics().catch(e=>toast(e.message)),0);}},
+ {label:'Reset workspace',run:()=>{confirmWorkspaceReset();return false;}},
  {label:'Export DWG copy',run:()=>api().save()},
  {label:'Export complete project JSON',run:()=>task('Exporting complete project…',async()=>{await saveCurrent();await download(JSON.stringify(project),filename('json'),'application/json');})},
  {label:'Source and licenses',run:()=>{window.open(new URL('cad-sources.html',document.baseURI),'_blank','noopener');}},
@@ -206,7 +254,7 @@ async function refreshWorkspace(force=false){if(((busy||cadGestures?.active)&&!f
  const key=state.document_id+'|'+state.revision+'|'+state.selection_revision+'|'+state.selection.join(',');if(key!==lastSelection){const picked=state.selection[0]?(await read({op:'query',handles:[state.selection[0]],detail:'geometry'})).entities[0]:null;if(epoch!==pollSerial)return;lastSelection=key;selection=picked;$('#point-summary').hidden=!selection;if(selection)$('#point-summary-label').textContent=pointForEntity(project,selection)?.label||selection.display_type||selection.type;}
  const revisionKey=state.document_id+':'+state.revision;
  if(lastRevision!==revisionKey){lastRevision=revisionKey;project.dirty=project.savedRevision!==state.revision;clearTimeout(saveTimer);saveTimer=null;}
- if(project.dirty&&!state.command&&!state.modal&&!saveTimer){const captured=project,id=state.document_id;saveTimer=setTimeout(()=>{saveTimer=null;if(!busy&&!cadGestures?.active&&captured.dirty&&project===captured&&currentId===id)task('Saving complete project…',saveCurrent,{background:true}).catch(error=>toast('Automatic save failed: '+error.message));},2200);}
+ if(project.dirty&&(!savedOpenAttempts.has(project.id)||savedOpenAttempts.get(project.id).status==='ready')&&!state.command&&!state.modal&&!saveTimer){const captured=project,id=state.document_id;saveTimer=setTimeout(()=>{saveTimer=null;if(!busy&&!cadGestures?.active&&captured.dirty&&project===captured&&currentId===id)task('Saving complete project…',saveCurrent,{background:true}).catch(error=>toast('Automatic save failed: '+error.message));},2200);}
 }
 
 document.body.classList.add('cad-workspace-page');$('#cad-frame').title='SparkWorld drawing canvas';$('.studio-heading>strong').textContent='Draw';$('#electrical-nav').innerHTML='<svg viewBox="0 0 24 24"><path d="M3 7h7l2 3h9v10H3zM3 10V5h7l2 2"/></svg>Projects';$('#cad-nav').lastChild.textContent='Draw';

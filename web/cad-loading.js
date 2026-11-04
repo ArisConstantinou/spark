@@ -3,7 +3,7 @@ const marker='sparkworld-opening-drawing';
 const paint=()=>new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
 export function interruptedImport(){try{return JSON.parse(sessionStorage.getItem(marker)||'null');}catch{return null;}}
 export function clearInterruptedImport(){try{sessionStorage.removeItem(marker);}catch{}}
-export function drawingLoader(file,{restoring=false}={}){
+export function drawingLoader(file,{restoring=false,onReset=null}={}){
  const previousFocus=document.activeElement,controller=new AbortController(),started=performance.now();
  const overlay=document.createElement('section');overlay.id='cad-import-progress';overlay.className='cad-import-progress';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-labelledby','cad-import-title');
  overlay.innerHTML='<div class="cad-import-card"><div class="cad-import-heading"><span class="spinner" aria-hidden="true"></span><span class="eyebrow">LOCAL DRAWING IMPORT</span></div><h1 id="cad-import-title">Opening your drawing</h1><div class="cad-import-file"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 2h9l5 5v15H5zM14 2v6h5M8 12h8M8 16h5"/></svg><div><strong></strong><span></span></div></div><ol><li>Read file</li><li>Open CAD</li><li>Save on device</li></ol><h2 id="cad-import-stage" role="status" aria-live="polite"></h2><p class="cad-import-detail"></p><div class="cad-import-bottom"><span class="cad-import-elapsed"></span><button type="button">Cancel reading</button></div><p class="cad-import-privacy">Drawing data stays on this device.</p></div>';
@@ -13,6 +13,7 @@ export function drawingLoader(file,{restoring=false}={}){
  document.body.append(overlay);
  const roots=[document.querySelector('.topbar'),document.querySelector('.studio-workspace'),document.querySelector('.studio-footer')].filter(Boolean),wasInert=roots.map(root=>root.inert);roots.forEach(root=>root.inert=true);
  const cancel=overlay.querySelector('button');cancel.onclick=()=>controller.abort(new DOMException('Drawing import cancelled before decoding.','AbortError'));cancel.focus();
+ const reset=onReset?document.createElement('button'):null;if(reset){reset.type='button';reset.textContent='Reset workspace';reset.hidden=true;reset.onclick=onReset;overlay.querySelector('.cad-import-bottom').append(reset);}
  const clock=setInterval(()=>overlay.querySelector('.cad-import-elapsed').textContent=Math.floor((performance.now()-started)/1000)+'s elapsed',1000);
  let stopped=false;
  return {
@@ -21,7 +22,7 @@ export function drawingLoader(file,{restoring=false}={}){
    controller.signal.throwIfAborted();
    overlay.querySelector('#cad-import-stage').textContent=title;overlay.querySelector('.cad-import-detail').textContent=detail;
    overlay.querySelectorAll('li').forEach((item,i)=>{item.dataset.state=i<index?'done':i===index?'current':'next';if(i===index)item.setAttribute('aria-current','step');else item.removeAttribute('aria-current');});
-   cancel.hidden=index>0;
+   cancel.hidden=index>0;if(reset)reset.hidden=index===0;
    try{sessionStorage.setItem(marker,JSON.stringify({name:file.name,size:file.size,stage:title,at:new Date().toISOString()}));}catch{}
    await paint();controller.signal.throwIfAborted();
   },
