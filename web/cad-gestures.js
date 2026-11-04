@@ -25,7 +25,12 @@ export function installCadGestures({inner,enabled,read,write,onError,onFinish}){
  async function move(g,points){
   await state(g);if(g.cancelled||!points.size)return;const now=shape(points);g.last=now.center;
   if(points.size>1){
-   if(!g.multiple||now.count!==g.previous?.count){g.multiple=true;await pan(g,now.center);g.previous=now;return;}
+   if(g.multiStart||!g.multiple||now.count!==g.previous?.count){
+    // Read/command requests are asynchronous. Keep the contact transition's
+    // original midpoint/spread even if newer moves coalesce while they wait.
+    const first=g.multiStart?.count===now.count?g.multiStart:now;g.multiStart=null;
+    g.multiple=true;await pan(g,first.center);g.previous=first;
+   }
    await pan(g,g.previous.center);await pointer(g,[{move:now.center}],'ctrl');
    if(g.previous.spread>4&&now.spread>4){const ratio=Math.max(.25,Math.min(4,now.spread/g.previous.spread));if(Math.abs(Math.log(ratio))>1e-5){
     const before=(await state(g)).camera.distance,target=before/ratio;let observed=before;
@@ -49,12 +54,16 @@ export function installCadGestures({inner,enabled,read,write,onError,onFinish}){
  inner.addEventListener('touchstart',e=>{
   if(!current&&!eligible(e))return;block(e);
   if(!current){current={start:point(e.changedTouches[0]),points:new Map(),mode:'pending',multiple:false,selection:[]};const g=current;queue(()=>begin(g),g);}
-  const g=current;for(const t of e.changedTouches)g.points.set(t.identifier,point(t));if(g.points.size>1){g.hadMultiple=true;queueMove(g,new Map(g.points));}
+  const g=current;for(const t of e.changedTouches)g.points.set(t.identifier,point(t));if(g.points.size>1){g.hadMultiple=true;g.multiStart=shape(g.points);queueMove(g,new Map(g.points));}
  },{capture:true,passive:false});
  inner.addEventListener('touchmove',e=>{if(!current)return;block(e);for(const t of e.changedTouches)current.points.set(t.identifier,point(t));queueMove(current,new Map(current.points));},{capture:true,passive:false});
  for(const name of ['touchend','touchcancel'])inner.addEventListener(name,e=>{
-  if(!current)return;block(e);const g=current;for(const t of e.changedTouches)g.points.set(t.identifier,point(t));queueMove(g,new Map(g.points));for(const t of e.changedTouches)g.points.delete(t.identifier);
-  if(name==='touchcancel'){g.cancelled=true;g.points.clear();}if(g.points.size)return;current=null;
+  if(!current)return;block(e);const g=current;for(const t of e.changedTouches)g.points.set(t.identifier,point(t));
+  // Browsers can emit one touchend per finger. The last single-contact event
+  // must not replace an unprocessed final two-contact camera update.
+  if(!g.hadMultiple||g.points.size>1)queueMove(g,new Map(g.points));
+  for(const t of e.changedTouches)g.points.delete(t.identifier);
+  if(name==='touchcancel'){g.cancelled=true;g.points.clear();}if(g.points.size){if(g.points.size>1)g.multiStart=shape(g.points);return;}current=null;
   queue(async()=>{if(g.cancelled||g.mode==='move'&&g.hadMultiple)await end(g,true);else if(g.mode==='pending'&&!g.hadMultiple){await state(g);await click(g,g.start);}else{if(g.mode==='move'){await click(g,g.last);const s=await state(g);if(s.command){await end(g,true);throw Error('The CAD engine did not finish the touch move.');}}await end(g,false);}await onFinish();},g);
  },{capture:true,passive:false});
  return{get active(){return!!current||pending>0;}};

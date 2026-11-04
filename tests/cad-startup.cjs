@@ -18,7 +18,7 @@ async function ready(){for(let i=0;i<4;i++){
   for(let i=0;i<100;i++){try{if((await fetch(base)).ok)break;}catch{}await new Promise(resolve=>setTimeout(resolve,100));}
   check(server.exitCode===null,'The startup test owns its server');
  }
- browser=await playwright[browserName].launch({headless:true,...(browserName==='chromium'&&process.env.SPARK_CHROME?{executablePath:process.env.SPARK_CHROME}:{})});
+ browser=await playwright[browserName].launch({headless:true,...(browserName==='chromium'?{args:['--force-device-scale-factor=2'],...(process.env.SPARK_CHROME?{executablePath:process.env.SPARK_CHROME}:{})}:{})});
  const mobile={viewport:{width:390,height:844},deviceScaleFactor:2,isMobile:true,hasTouch:true,serviceWorkers:'block'};
  const context=await browser.newContext(mobile),errors=[];let releaseDownload;
  let staleAssets=0;
@@ -69,7 +69,7 @@ async function ready(){for(let i=0;i<4;i++){
  await page.goto(base,{waitUntil:'commit'});await page.waitForFunction(()=>document.querySelector('#cad-frame')?.src.includes('spark_core='));
  await page.clock.fastForward(121000);await page.locator('#retry-cad').waitFor({state:'visible'});
  check(await page.locator('#studio-loading p').textContent().then(text=>text.includes('did not finish loading'))&&await page.locator('#studio-loading .spinner').isHidden(),'A loaded page with no native bridge fails within the startup deadline');
- await stalled.close();report.status='PASS';
+ await stalled.close();if(browserName==='chromium')report.nativeTouch=await require('./cad-native-touch.cjs')({browser,baseUrl:base,out,check});report.status='PASS';
 })().catch(async error=>{
  report.status='FAIL';report.error=error.stack;console.error(error.stack);process.exitCode=1;
  if(page){report.diagnostic=await page.evaluate(()=>({loading:document.querySelector('#studio-loading')?.textContent,status:document.querySelector('#studio-operation')?.textContent,ready:window.sparkWorkspace?.ready,engine:window.sparkCadStudio?.state})).catch(()=>null);await page.screenshot({path:path.join(out,'cad-startup-failure-'+browserName+'.png'),timeout:5000}).catch(()=>{});}
