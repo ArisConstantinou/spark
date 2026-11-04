@@ -19,7 +19,7 @@ module.exports=async({page,check})=>{
  check(failed?.includes('opens DWG')&&!await page.locator('#cad-import-progress').count(),'Rejected formats restore the usable workspace without a stuck loader');
  await page.evaluate(()=>sessionStorage.setItem('sparkworld-opening-drawing',JSON.stringify({name:'Interrupted drawing.dwg',stage:'Opening the CAD drawing'})));
  await page.reload();await page.waitForFunction(()=>window.sparkWorkspace?.ready,{},{timeout:120000});
- check((await page.locator('#dialog-title').textContent())==='The previous drawing did not finish opening','An interrupted tab reports the unfinished operation on the next visit');
+ check(await page.locator('.cad-recent-drawing').isVisible()&&(await page.locator('.cad-recent-drawing').textContent()).includes('Interrupted drawing.dwg did not finish opening.')&&await page.evaluate(()=>!document.querySelector('#dialog').open),'An interrupted tab reports the unfinished operation inline without a blocking dialog');
  check(await page.evaluate(()=>!sparkWorkspace.project&&!sessionStorage.getItem('sparkworld-opening-drawing')),'Interrupted imports do not automatically reopen into a crash loop');
- await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+ await page.getByRole('button',{name:'Dismiss',exact:true}).click();
 };
