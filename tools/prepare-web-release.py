@@ -29,7 +29,7 @@ shutil.copytree(web, output, dirs_exist_ok=True, ignore=shutil.ignore_patterns('
 files = sorted(path for path in web.iterdir() if path.suffix in ('.js', '.css', '.html'))
 names = {path.name: f'{path.stem}.{args.commit}{path.suffix}' for path in files}
 names['version.json'] = f'version.{args.commit}.json'
-pattern = re.compile(r'''(['"])(\./)?(''' + '|'.join(re.escape(name) for name in names) + r''')\1''')
+pattern = re.compile(r'''(['"])(\./)?(''' + '|'.join(re.escape(name) for name in names if name != 'index.html') + r''')\1''')
 label = html.escape(f'v{version["version"]} · {args.commit[:7]}')
 for path in files:
     source = path.read_text(encoding='utf-8')

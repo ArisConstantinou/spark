@@ -6,8 +6,9 @@ const check=(pass,label)=>{assert(pass,label);report.checks.push(label);console.
 const base='http://127.0.0.1:5173/spark/';
 const dxf='0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1015\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n0\n10\n10\n20\n20\n30\n0\n11\n110\n21\n70\n31\n0\n0\nENDSEC\n0\nEOF\n';
 async function ready(){for(let i=0;i<4;i++){
- const result=await page.waitForFunction(()=>document.querySelector('#dialog')?.open&&document.querySelector('#dialog-title')?.textContent==='CAD graphics notice'?'graphics':window.sparkWorkspace?.ready&&!sparkWorkspace.busy?'ready':false,null,{timeout:135000});
- if(await result.jsonValue()==='ready')return;
+ const result=await page.waitForFunction(()=>document.querySelector('#studio-loading')?.dataset.failed?'failed':document.querySelector('#dialog')?.open&&document.querySelector('#dialog-title')?.textContent==='CAD graphics notice'?'graphics':window.sparkWorkspace?.ready&&!sparkWorkspace.busy?'ready':false,null,{timeout:135000});
+ const status=await result.jsonValue();if(status==='ready')return;
+ if(status==='failed')throw Error(await page.locator('#studio-loading p').textContent());
  await page.getByRole('button',{name:'Continue with software rendering',exact:true}).click();
 }throw Error('The CAD workspace did not become ready');}
 (async()=>{

@@ -13,7 +13,7 @@ export async function waitForCadEngine(frame,url,{core,timeoutMs=120000,onStage=
   const wasm=Object.keys(manifest.files||{}).find(name=>/^OpenCADStudio-[a-f\d]+_bg\.wasm$/.test(name));
   const script=Object.keys(manifest.files||{}).find(name=>/^OpenCADStudio-[a-f\d]+\.js$/.test(name));
   if(!wasm||!script)throw Error('The CAD engine download is incomplete. Please retry.');
-  const assets=await Promise.all(['index.html','ocs-control.js',script,wasm].map(name=>fetch(new URL(name,url),{method:'HEAD',cache:'no-cache',signal})));
+  const assets=await Promise.all([url,...['ocs-control.js',script,wasm].map(name=>new URL(name,url))].map(assetUrl=>fetch(assetUrl,{method:'HEAD',cache:'no-cache',signal})));
   if(assets.some(asset=>!asset.ok)||!assets.at(-1).headers.get('content-type')?.includes('application/wasm'))throw Error('The CAD engine download is unavailable. Check your connection and retry.');
   onStage('Loading the CAD engine. The first visit downloads a large file; keep this tab open.');
   return await new Promise((resolve,reject)=>{
