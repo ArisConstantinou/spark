@@ -51,7 +51,7 @@ async function ready(){for(let i=0;i<4;i++){
  await page.waitForFunction(()=>sparkWorkspace.project?.name==='Startup drawing'&&!sparkWorkspace.busy);
  check(await page.evaluate(async()=>(await sparkWorkspace.read({op:'query',type:'Line',detail:'geometry'})).entities.some(entity=>entity.start[0]===10&&entity.end[1]===70)),'A drawing chosen through the mobile Open button reaches the real CAD engine');
  await page.reload({waitUntil:'commit'});await ready();
- await require('./continue-saved.cjs')(page);await page.waitForFunction(()=>sparkWorkspace.project?.name==='Startup drawing'&&!sparkWorkspace.busy);
+ await require('./continue-saved.cjs')(page);await ready();await page.waitForFunction(()=>sparkWorkspace.project?.name==='Startup drawing'&&!sparkWorkspace.busy);
  check(await page.evaluate(()=>sparkWorkspace.project?.name==='Startup drawing'),'A cached startup restores the saved drawing');
  check(!errors.length,'Healthy startup and import have no unhandled browser errors');
  await context.close();
