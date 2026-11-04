@@ -25,4 +25,26 @@ export function validateProject(value,{clone=true}={}){
  return clone?structuredClone(value):value;
 }
 export function savedDrawingFile(project){return {name:project.working.name,size:Math.floor(project.working.data.length*3/4)-(project.working.data.endsWith('==')?2:project.working.data.endsWith('=')?1:0)};}
-export const projectStore={save:project=>transaction('readwrite',s=>s.put(validateProject(project,{clone:false}))),catalog:async()=>readCatalog(await open(),'projects',p=>p?.working&&typeof p.working.data==='string'?{id:p.id,name:p.name,updated:p.updated,file:savedDrawingFile(p)}:null),get:id=>transaction('readonly',s=>s.get(id))};
+async function saveProject(project){
+ validateProject(project,{clone:false});
+ const db=await open();
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction('projects','readwrite'),store=tx.objectStore('projects'),existing=store.get(project.id);
+  let failure;
+  existing.onsuccess=()=>{
+   if(existing.result?.deleted){failure=Error('This saved project was deleted. Import the drawing again to create a new project.');tx.abort();return;}
+   store.put(project);
+  };
+  tx.oncomplete=()=>resolve(project.id);
+  tx.onerror=()=>reject(tx.error);
+  tx.onabort=()=>reject(failure||tx.error||Error('Project storage was interrupted.'));
+ });
+}
+export const projectStore={
+ save:saveProject,
+ catalog:async()=>readCatalog(await open(),'projects',p=>p?.working&&typeof p.working.data==='string'?{id:p.id,name:p.name,updated:p.updated,file:savedDrawingFile(p)}:null),
+ get:async id=>{const value=await transaction('readonly',s=>s.get(id));return value?.deleted?undefined:value;},
+ // Retain only the identity so a stale tab cannot silently recreate the
+ // deleted drawing. Its geometry, source bytes and metadata are removed.
+ remove:id=>transaction('readwrite',s=>s.put({id,deleted:true})),
+};

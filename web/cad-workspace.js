@@ -84,6 +84,37 @@ async function openProject(saved,reuse=false,progress=null){
  localStorage.setItem('sparkworld-cad-active',project.id);
 }
 function restoreStoredProject(id,file,alreadyRead=null){return task('Restoring project…',async progress=>{await progress.stage(0,'Reading the saved project','Retrieving the selected drawing from this device.');const saved=alreadyRead??await projectStore.get(id);if(!saved)throw Error('The saved drawing was not found.');await openProject(saved,true,progress);},{loading:file,restoring:true});}
+function savedProjectRow(saved,legacy=false){
+ const kind=legacy?'legacy':'project',description=legacy?(saved.cad?'Import a copy with its electrical data':'Open image / blank drawing'):new Date(saved.updated).toLocaleString();
+ return `<div class="cad-project-entry"><button class="cad-project-row" data-${kind}="${esc(saved.id)}"><strong>${esc(saved.name)}</strong><small>${esc(description)}</small></button><button class="cad-project-delete" data-delete-${kind}="${esc(saved.id)}" aria-label="Delete saved project ${esc(saved.name)}" title="Delete saved project"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7"/></svg></button></div>`;
+}
+function confirmProjectRemoval(saved,legacy=false){
+ const open=!legacy&&[...projects.values()].some(value=>value.id===saved.id);
+ dialog('Delete saved project?',`<p class="dialog-copy">Delete <strong>${esc(saved.name)}</strong> from this device? Its saved drawing, circuits and notes will be removed.</p>${open?'<p class="dialog-copy">Its open drawing will close. Any unsaved changes in that drawing will be discarded.</p>':''}<p class="dialog-copy">Export a backup first if you want to keep this project.</p>`,[
+  {label:'Cancel',run:()=>{}},
+  {label:'Delete project',primary:true,run:()=>task('Deleting saved project…',async()=>{
+   if(legacy){
+    await legacyStorage.remove(saved.id);
+    if(localStorage.getItem('fyp-active')===saved.id)localStorage.removeItem('fyp-active');
+   }else{
+    clearTimeout(saveTimer);saveTimer=null;
+    const state=await read({op:'state'});
+    const opened=state.documents.filter(document=>!document.start&&projects.get(document.id)?.id===saved.id);
+    for(const document of opened){
+     await mutate({op:'close',document_id:document.id,discard:true});
+     if((await read({op:'state'})).documents.some(value=>value.id===document.id))throw Error('The open drawing could not be closed. The saved project has been kept.');
+     projects.delete(document.id);adapters.delete(document.id);
+    }
+    await projectStore.remove(saved.id);
+    if(localStorage.getItem('sparkworld-cad-active')===saved.id)localStorage.removeItem('sparkworld-cad-active');
+    bindDocument(await read({op:'state'}));
+   }
+   catalogue=null;
+   if(panel==='Projects')await renderPanel();
+   toast('Deleted '+saved.name+' from saved projects.');
+  })},
+ ]);
+}
 async function importFile(file){if(!file)return;return task('Opening '+file.name+'…',async progress=>{
  await progress.stage(0,'Reading the selected file','Cloud files may need to download before reading can finish. You can cancel this stage.');
  const ext=file.name.split('.').at(-1).toLowerCase();if(file.size>(ext==='json'?128:48)*1024*1024)throw Error('The selected file exceeds the supported import size.');
@@ -121,7 +152,7 @@ async function details(){if(!selection)return;const handle=selection.handle,p=po
 }
 async function activeElectricalCount(){const owner=project,document=currentId,handles=Object.keys(owner?.points||{});let count=0;for(let offset=0;offset<handles.length;offset+=2000){const reply=await read({op:'query',document_id:document,handles:handles.slice(offset,offset+2000),detail:'geometry'});if(currentId!==document||project!==owner)return null;count+=reply.entities.filter(entity=>pointForEntity(owner,entity)).length;}return count;}
 async function renderPanel(){if(panel==='Symbols')return symbolPanel();if(panel==='Layers')return layerPanel();if(panel==='Circuits'){const owner=project,count=project?await activeElectricalCount():0;if(panel!=='Circuits'||project!==owner||count===null)return;$('#workspace-panel-body').innerHTML=project?`<div class="cad-circuit-stats">${project.circuits.length} circuits · ${count} electrical points</div><button id="new-circuit">＋ Create circuit</button><div class="cad-circuit-list">${project.circuits.map(c=>`<button data-circuit="${esc(c.id)}">${esc(c.ref+' · '+c.name)}</button>`).join('')}</div>`:'<p class="cad-workspace-instructions">Open or create a drawing to manage its circuits.</p>';$('#new-circuit')?.addEventListener('click',()=>circuitForm());for(const button of document.querySelectorAll('[data-circuit]'))button.onclick=()=>circuitForm(button.dataset.circuit);return;}
- if(panel==='Projects'){const serial=++catalogueRender,read=catalogue??(catalogue=Promise.all([projectStore.catalog(),legacyStorage.catalog()]));let saved,older;try{[saved,older]=await read;}catch(error){if(catalogue===read)catalogue=null;throw error;}if(panel!=='Projects'||serial!==catalogueRender)return;const query=$('#workspace-search').value.toLocaleLowerCase(),byId=new Map(saved.map(p=>[p.id,p]));$('#workspace-panel-body').innerHTML=`<button id="workspace-new">＋ New drawing</button><p class="cad-workspace-instructions">CAD geometry, circuits and notes are saved together on this device.</p>`+saved.filter(p=>p.name.toLocaleLowerCase().includes(query)).sort((a,b)=>b.updated.localeCompare(a.updated)).map(p=>`<button class="cad-project-row" data-project="${esc(p.id)}"><strong>${esc(p.name)}</strong><small>${esc(new Date(p.updated).toLocaleString())}</small></button>`).join('')+(older.length?'<h3>Earlier saved drawings</h3>':'')+older.filter(p=>p.name.toLocaleLowerCase().includes(query)).map(p=>`<button class="cad-project-row" data-legacy="${esc(p.id)}"><strong>${esc(p.name)}</strong><small>${p.cad?'Import a copy with its electrical data':'Open image / blank drawing'}</small></button>`).join('');$('#workspace-new').onclick=()=>newDrawing().catch(e=>toast(e.message));for(const button of document.querySelectorAll('[data-project]'))button.onclick=()=>restoreStoredProject(button.dataset.project,byId.get(button.dataset.project).file).catch(e=>toast(e.message));for(const button of document.querySelectorAll('[data-legacy]'))button.onclick=()=>migrateLegacy(button.dataset.legacy).catch(e=>toast(e.message));}
+ if(panel==='Projects'){const serial=++catalogueRender,read=catalogue??(catalogue=Promise.all([projectStore.catalog(),legacyStorage.catalog()]));let saved,older;try{[saved,older]=await read;}catch(error){if(catalogue===read)catalogue=null;throw error;}if(panel!=='Projects'||serial!==catalogueRender)return;const query=$('#workspace-search').value.toLocaleLowerCase(),byId=new Map(saved.map(p=>[p.id,p]));$('#workspace-panel-body').innerHTML=`<button id="workspace-new">＋ New drawing</button><p class="cad-workspace-instructions">CAD geometry, circuits and notes are saved together on this device.</p>`+saved.filter(p=>p.name.toLocaleLowerCase().includes(query)).sort((a,b)=>b.updated.localeCompare(a.updated)).map(p=>savedProjectRow(p)).join('')+(older.length?'<h3>Earlier saved drawings</h3>':'')+older.filter(p=>p.name.toLocaleLowerCase().includes(query)).map(p=>savedProjectRow(p,true)).join('');$('#workspace-new').onclick=()=>newDrawing().catch(e=>toast(e.message));for(const button of document.querySelectorAll('[data-project]'))button.onclick=()=>restoreStoredProject(button.dataset.project,byId.get(button.dataset.project).file).catch(e=>toast(e.message));for(const button of document.querySelectorAll('button[data-legacy]'))button.onclick=()=>migrateLegacy(button.dataset.legacy).catch(e=>toast(e.message));for(const button of document.querySelectorAll('[data-delete-project]'))button.onclick=()=>confirmProjectRemoval(byId.get(button.dataset.deleteProject));const olderById=new Map(older.map(value=>[value.id,value]));for(const button of document.querySelectorAll('[data-delete-legacy]'))button.onclick=()=>confirmProjectRemoval(olderById.get(button.dataset.deleteLegacy),true);}
 }
 async function layerPanel(){if(!project){$('#workspace-panel-body').innerHTML='<p class="cad-workspace-instructions">Open a drawing to inspect its layers.</p>';return;}const rows=(await read({op:'records',collection:'layers',limit:10000})).records,query=$('#workspace-search').value.toLocaleLowerCase();if(panel!=='Layers')return;
  $('#workspace-panel-body').innerHTML=`<div class="layer-summary"><strong>${rows.filter(row=>!row.properties.flags.off&&!row.properties.flags.frozen).length} / ${rows.length} layers enabled</strong></div><div class="layer-actions"><button id="native-show-all">Reveal all</button><button id="native-source-state">Source state</button></div><p class="cad-workspace-instructions">Reveal all also unfreezes placement and child layers used by blocks. Original file bytes are retained.</p>`+rows.filter(row=>row.name.toLocaleLowerCase().includes(query)).map(row=>`<label class="layer-row"><input type="checkbox" data-native-layer="${esc(row.handle)}" ${!row.properties.flags.off&&!row.properties.flags.frozen?'checked':''}><span class="layer-details"><strong>${esc(row.name)}</strong><small>${row.properties.flags.frozen?'Frozen':row.properties.flags.off?'Off':'Enabled'}${row.properties.flags.locked?' · Locked':''}</small></span></label>`).join('');
