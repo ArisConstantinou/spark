@@ -27,6 +27,7 @@ module.exports=async function verifyProjectResume({browser,baseUrl,check}){
   },ids['Upper floor']);
   check(failure==='Injected project storage failure','A failed multi-document save reports the underlying storage failure');
   check(await page.evaluate(id=>sparkWorkspace.project.id===id&&localStorage.getItem('sparkworld-cad-active')===id,ids['Ground floor']),'A failed save restores the original drawing and reload target');
+  await page.evaluate(()=>sparkWorkspace.save());
   await page.locator('[data-cad-document]').filter({hasText:/^Ground floor/}).click();await ready('Ground floor');
   await page.locator('[data-cad-document]').filter({hasText:/^Upper floor/}).click();await ready('Upper floor');
   if(!await page.locator('#electrical-nav').isVisible())await page.getByRole('button',{name:'Show workspace navigation',exact:true}).click();
