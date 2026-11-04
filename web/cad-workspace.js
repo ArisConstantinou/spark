@@ -36,7 +36,21 @@ async function factorFromDrawing(){const envelope=await mutate({op:'sysvar',get:
 async function rememberSourceLayers(){const rows=(await read({op:'records',collection:'layers',limit:10000})).records;project.sourceLayers=Object.fromEntries(rows.map(row=>[row.name,structuredClone(row.properties.flags)]));}
 async function snapshot(){const state=await read({op:'state'});if(!bindDocument(state))throw Error('Open or create a drawing first.');if(state.command||state.modal)throw Error('Finish or cancel the CAD command and close any notice before saving.');const envelope=await mutate({op:'save',name:filename('dwg'),target_format:'dwg',target_version:'AC1032'}),data=envelope.result||envelope;if(data.dropped_on_save||typeof data.data_base64!=='string'||atob(data.data_base64.slice(0,8))!=='AC1032')throw Error('The native CAD engine could not provide a verified DWG 2018 copy.');project.working={name:filename('dwg'),format:'dwg',data:data.data_base64};project.savedRevision=state.revision;project.activeLayout=state.layout;project.updated=new Date().toISOString();return project;}
 async function saveCurrent(){if(savedOpenAttempts.get(project?.id)?.status==='failed')throw Error('The previous opening did not finish. Replace or reset that drawing before saving it.');const state=await read({op:'state'});if(state.command||state.modal)throw Error('Finish or cancel the CAD command and close any notice before saving.');if(!project?.working||state.document_id!==currentId||state.revision!==project.savedRevision||state.layout!==project.activeLayout)await snapshot();project.updated=new Date().toISOString();await projectStore.save(project);catalogue=null;project.dirty=false;localStorage.setItem('sparkworld-cad-active',project.id);$('#studio-operation').textContent='CAD geometry, circuits and notes saved together on this device';return project;}
-async function saveAll(){const state=await read({op:'state'}),selected=state.document_id;for(const d of state.documents.filter(d=>!d.start&&savedOpenAttempts.get(projects.get(d.id)?.id)?.status!=='failed')){if(d.id!==(await read({op:'state'})).document_id)await activate(d.id);bindDocument(await read({op:'state'}));await saveCurrent();}if(state.documents.some(d=>d.id===selected))await activate(selected);bindDocument(await read({op:'state'}));}
+async function saveAll(){
+ const state=await read({op:'state'}),selected=state.document_id;
+ try{
+  for(const d of state.documents.filter(d=>!d.start&&savedOpenAttempts.get(projects.get(d.id)?.id)?.status!=='failed')){
+   if(d.id!==(await read({op:'state'})).document_id)await activate(d.id);
+   bindDocument(await read({op:'state'}));await saveCurrent();
+  }
+ }finally{
+  // Saving another tab must not change which drawing the user returns to,
+  // even when a later project's storage write fails.
+  if((await read({op:'state'})).documents.some(d=>d.id===selected))await activate(selected);
+  bindDocument(await read({op:'state'}));
+  if(project&&savedOpenAttempts.get(project.id)?.status!=='failed')localStorage.setItem('sparkworld-cad-active',project.id);
+ }
+}
 async function compact(){while(api().busy)await delay(50);if(!api().compact)await api().toggleCanvas();}
 async function definitions(){
  if(!project)throw Error('Open or create a drawing first.');
@@ -127,7 +141,7 @@ async function restoreStoredProject(id,file,alreadyRead=null){
  if(existing.length){
   dialog(attempt?.status==='failed'?'Previous opening did not finish':'Project already open',`<p class="dialog-copy">This project already has a drawing in memory. Return to it, or replace it with the saved copy.</p><p class="dialog-copy">Replacing closes the previous drawing first and discards its unsaved changes.</p>`,[
    {label:'Cancel',run:()=>{}},
-   {label:'Show existing drawing',closeFirst:true,run:()=>task('Showing the open drawing…',async()=>{await activate(existing[0].id);bindDocument(await read({op:'state'}));closePanel();})},
+   {label:'Show existing drawing',closeFirst:true,run:()=>task('Showing the open drawing…',async()=>{await activate(existing[0].id);bindDocument(await read({op:'state'}));if(attempt?.status!=='failed')localStorage.setItem('sparkworld-cad-active',project.id);closePanel();})},
    {label:'Replace and reload',primary:true,closeFirst:true,run:()=>restore(true)},
   ]);
   return;
