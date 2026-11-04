@@ -28,7 +28,7 @@ module.exports=async function verifyBrowserStorage({browser,baseUrl,fixture,chec
    const source=await page.evaluate(()=>({name:sparkWorkspace.project.name,original:sparkWorkspace.project.original,working:!!sparkWorkspace.project.working}));
    check(source.name==='storage-fixture'&&source.original.data===data&&source.working,mode+': a successful open retains the exact original and complete project metadata');
    const count=await page.evaluate(async()=>(await sparkWorkspace.read({op:'query',limit:1})).count);check(count>0,mode+': actual native drawing geometry is present');
-   await page.locator('#save').click();await page.waitForFunction(()=>!sparkWorkspace.busy);await page.reload();await ready();
+   await page.locator('#save').click();await page.waitForFunction(()=>!sparkWorkspace.busy);await page.reload();await require('./continue-saved.cjs')(page);await ready();
    const restored=await page.evaluate(async()=>({source:sparkWorkspace.project.original.data,name:sparkWorkspace.project.name,count:(await sparkWorkspace.read({op:'query',limit:1})).count}));
    check(restored.source===data&&restored.name==='storage-fixture'&&restored.count===count,mode+': saved-project reload restores geometry and source through real IndexedDB without OPFS');
    check(!errors.length,mode+': no unhandled JavaScript exception or WebAssembly panic');

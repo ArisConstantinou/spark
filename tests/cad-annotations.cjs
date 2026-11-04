@@ -43,7 +43,7 @@ module.exports=async function verifyAnnotations({page,cad,check,out}){
  const single=(await cad({op:'query',type:'Text',detail:'full',limit:10000})).entities.find(e=>JSON.stringify(e).includes('Φωτισμός'));
  check(single,'A fresh tap places actual CAD text without the old inline editor');
  state=await cad({op:'state'});check(!state.text_editor&&!state.mtext_editor,'Both annotation workflows leave no native text editor open');
- await page.evaluate(()=>sparkWorkspace.save());await page.reload();
+ await page.evaluate(()=>sparkWorkspace.save());await page.reload();await require('./continue-saved.cjs')(page);
  let restoredReady=false;
  for(let attempt=0;attempt<4;attempt++){
   const outcome=await page.waitForFunction(()=>{if(document.querySelector('#dialog')?.open&&document.querySelector('#dialog-title')?.textContent==='CAD graphics notice')return 'graphics';if(window.sparkWorkspace?.ready&&sparkWorkspace.project?.working&&!sparkWorkspace.busy)return 'ready';},{},{timeout:120000});

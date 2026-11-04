@@ -36,6 +36,8 @@ module.exports=async function verifyProjectResume({browser,baseUrl,check}){
   check(await page.evaluate(id=>sparkWorkspace.project.id===id&&localStorage.getItem('sparkworld-cad-active')===id,ids['Ground floor']),'Showing an existing drawing remembers that project for the next visit');
   check(await page.evaluate(async()=>(await sparkWorkspace.read({op:'state'})).documents.filter(document=>!document.start).length===2),'Returning to an existing project keeps exactly the two original native drawings');
   await page.reload();await ready();
+  check(await page.evaluate(()=>!sparkWorkspace.project),'Reload waits for an explicit choice before opening the last CAD project');
+  await page.getByRole('button',{name:'Continue saved drawing',exact:true}).click();await ready('Ground floor');
   check(await page.evaluate(async({id,handle})=>sparkWorkspace.project?.id===id&&(await sparkWorkspace.read({op:'query',handles:[handle],detail:'geometry'})).entities.some(entity=>entity.start?.[0]===200&&entity.end?.[1]===500),{id:ids['Ground floor'],handle}),'Reload opens the selected project with its saved native edits');
   check(!errors.length,'Project resume and failed-save recovery have no unhandled browser errors');
  }finally{await context.close();}

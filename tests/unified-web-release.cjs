@@ -18,6 +18,7 @@ const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
  process.env.SPARK_TEST_DPR='2';process.env.SPARK_HOSTED_RENDERER='1';
  await require('./cad-open-saves.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',check});
  await require('./cad-project-resume.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',check});
+ await require('./cad-hidden-recovery.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',fixture:path.resolve(process.env.SPARK_FIXTURE||'.out/layer-fixture.dwg'),out,check});
  await require('./cad-catalog.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',fixture:path.resolve(process.env.SPARK_FIXTURE||'.out/layer-fixture.dwg'),check});
  await require('./cad-context.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',fixture:path.resolve(process.env.SPARK_FIXTURE||'.out/layer-fixture.dwg'),out,check});
  await require('./cad-polling.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',fixture:path.resolve(process.env.SPARK_FIXTURE||'.out/layer-fixture.dwg'),out,check});

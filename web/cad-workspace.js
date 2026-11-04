@@ -34,7 +34,23 @@ function filename(ext){return(project?.name||'Drawing').replace(/[<>:"/\\|?*]/g,
 function closePanel(){nativeControls?.cancelPlacement();panel=null;$('#workspace-library').hidden=true;$('.studio-workspace').classList.remove('has-library');}
 function openPanel(name){nativeControls?.cancelPlacement();panel=name;$('#workspace-library').hidden=false;$('.studio-workspace').classList.add('has-library');$('#workspace-panel-title').textContent=name;$('#workspace-search').value='';if(name==='Projects'){catalogue=null;$('#workspace-panel-body').textContent='Reading saved drawings…';}renderPanel().catch(e=>toast(e.message));}
 const currentDocument=state=>state.documents?.find(d=>d.id===state.document_id&&!d.start);
-async function reviewGraphics(){const state=await read({op:'state'});if(!state.modal)return;const signature=JSON.stringify(state.modal);if(!/GpuWarning/.test(signature))throw Error('Review the notice inside the CAD editor before continuing.');if(graphicsConsent!==signature){const accepted=await new Promise(resolve=>{dialog('CAD graphics notice','<p class="dialog-copy">The CAD engine is using software graphics. Large drawings may be slower on this browser.</p>',[{label:'Cancel',run:()=>resolve(false)},{label:'Continue with software rendering',primary:true,run:()=>resolve(true)}]);$('#dialog').addEventListener('close',()=>resolve(false),{once:true});});if(!accepted)throw Error('CAD operation cancelled.');graphicsConsent=signature;}await mutate({op:'action',name:'close_modal'});}
+async function reviewGraphics(){
+ let deferred=false;
+ // Native CloseModal on AutosaveRestore means Defer, not Discard. The exact
+ // engine implementation preserves the snapshot bytes and advances its queue.
+ for(let step=0;step<20;step++){
+  const state=await read({op:'state'});if(!state.modal){if(deferred)toast('The earlier CAD recovery copy was kept. Your selected drawing can now open.');return;}
+  if(state.modal==='AutosaveRestore'){await mutate({op:'action',name:'close_modal'});deferred=true;continue;}
+  const signature=JSON.stringify(state.modal),gpu=state.modal==='GpuWarning';
+  if(!gpu||graphicsConsent!==signature){
+   const title=gpu?'CAD graphics notice':'CAD notice',body=gpu?'The CAD engine is using software graphics. Large drawings may be slower on this browser.':`The CAD engine has an open notice: ${esc(String(state.modal))}. Close that notice to continue with the drawing you selected. No recovery copy will be discarded.`;
+   const accepted=await new Promise(resolve=>{dialog(title,`<p class="dialog-copy">${body}</p>`,[{label:'Cancel opening',run:()=>resolve(false)},{label:gpu?'Continue with software rendering':'Close notice and continue',primary:true,run:()=>resolve(true)}]);$('#dialog').addEventListener('close',()=>resolve(false),{once:true});});
+   if(!accepted)throw Error('CAD operation cancelled.');if(gpu)graphicsConsent=signature;
+  }
+  await mutate({op:'action',name:'close_modal'});
+ }
+ throw Error('The CAD notice did not close. Your drawing and recovery copies have been kept.');
+}
 function bindDocument(state,metadata=null){const d=currentDocument(state);if(!d){currentId=null;project=null;return null;}const changed=currentId!==d.id;currentId=d.id;project=metadata||projects.get(d.id)||createProject(d.title||'Untitled drawing');projects.set(d.id,project);if(changed)activeCircuit=project.activeCircuit||project.circuits[0]?.id||'';return project;}
 async function factorFromDrawing(){const envelope=await mutate({op:'sysvar',get:['insunits']}),units=(envelope.result||envelope).values?.insunits;project.units=Number(units);project.factor=({1:25.4,2:304.8,4:1,5:10,6:1000,7:1e6})[project.units]||1;project.unitsConfirmed=[1,2,4,5,6].includes(project.units);}
 async function rememberSourceLayers(){const rows=(await read({op:'records',collection:'layers',limit:10000})).records;project.sourceLayers=Object.fromEntries(rows.map(row=>[row.name,structuredClone(row.properties.flags)]));}
@@ -146,7 +162,7 @@ async function openProject(saved,reuse=false,progress=null){
 function confirmWorkspaceReset(id=null){
  dialog(id?'Reset and reload this project?':'Reset workspace?',`<p class="dialog-copy">Restart the drawing engine and close all open drawings. Unsaved changes will be discarded.</p><p class="dialog-copy">Saved projects and original files stay on this device.${id?' The selected saved project will open in the fresh workspace.':' The workspace will restart empty.'}</p>`,[
   {label:'Cancel',run:()=>{}},
-  {label:id?'Reset and reload':'Reset workspace',primary:true,run:()=>{clearTimeout(saveTimer);saveTimer=null;if(id)localStorage.setItem('sparkworld-cad-active',id);else localStorage.removeItem('sparkworld-cad-active');clearInterruptedImport();api().restartWorkspace();}},
+  {label:id?'Reset and reload':'Reset workspace',primary:true,run:()=>{clearTimeout(saveTimer);saveTimer=null;if(id){localStorage.setItem('sparkworld-cad-active',id);sessionStorage.setItem('sparkworld-reload-request',id);}else{localStorage.removeItem('sparkworld-cad-active');sessionStorage.removeItem('sparkworld-reload-request');}clearInterruptedImport();api().restartWorkspace();}},
  ]);
 }
 async function restoreStoredProject(id,file,alreadyRead=null){
@@ -297,7 +313,7 @@ const library=document.createElement('aside');library.id='workspace-library';lib
 const placement=document.createElement('div');placement.id='electrical-placement';placement.className='electrical-placement';placement.hidden=true;placement.tabIndex=0;placement.setAttribute('aria-label','Tap to place the selected electrical symbol');$('.studio-frame-wrap').append(placement);
 welcome=document.createElement('section');welcome.className='cad-own-welcome';welcome.hidden=true;
 welcome.innerHTML='<svg viewBox="0 0 310 150" aria-hidden="true"><path d="M35 125V28h155v97H35m80-97v62m0 0h75m0-62h83v97h-83M35 90h80" fill="none" stroke="#728ca2" stroke-width="3"/><path d="M53 108V47h45m37 0h38v60m32-60h48v60" fill="none" stroke="#167cff" stroke-width="2" stroke-dasharray="4 4"/><g fill="#111f2d" stroke="#6bb2ff" stroke-width="2"><circle cx="53" cy="108" r="8"/><circle cx="98" cy="47" r="8"/><circle cx="173" cy="107" r="8"/><circle cx="253" cy="107" r="8"/></g><path d="M49 104l8 8m0-8l-8 8" stroke="#67d7ab" stroke-width="2"/></svg><span class="eyebrow">YOUR PLAN. YOUR PRECISION.</span><h1>Bring your electrical<br>drawing into focus.</h1><p>Open your DWG or DXF.<br>Draw, place electrical symbols and organise circuits.</p><div><button type="button" class="primary" id="cad-own-welcome-open">Open a drawing</button><button type="button" id="cad-own-welcome-new">New drawing</button></div>';
-$('.studio-frame-wrap').append(welcome);$('#cad-own-welcome-open').onclick=()=>$('#file-input').click();$('#cad-own-welcome-new').onclick=()=>newDrawing().catch(e=>toast(e.message));
+$('.studio-frame-wrap').append(welcome);$('#cad-own-welcome-open').onclick=e=>window.sparkImportSources?window.sparkImportSources.open(e.currentTarget):$('#file-input').click();$('#cad-own-welcome-new').onclick=()=>newDrawing().catch(e=>toast(e.message));
 const summary=document.createElement('div');summary.id='point-summary';summary.className='cad-point-summary';summary.hidden=true;summary.innerHTML='<span id="point-summary-label"></span><button id="point-details">Details</button><button id="point-clear" aria-label="Clear selection">×</button>';$('.studio-frame-wrap').append(summary);
 const layersButton=document.createElement('button');layersButton.id='workspace-layers';layersButton.textContent='Layers';layersButton.onclick=()=>openPanel('Layers');$('.studio-context').append(layersButton);
 let gesture=null,touches=new Set();placement.onpointerdown=e=>{placement.setPointerCapture(e.pointerId);touches.add(e.pointerId);if(!gesture)gesture={x:e.clientX,y:e.clientY,moved:false,multiple:false};if(touches.size>1)gesture.multiple=true;};placement.onpointermove=e=>{if(gesture&&Math.hypot(e.clientX-gesture.x,e.clientY-gesture.y)>8)gesture.moved=true;};placement.onpointerup=e=>{touches.delete(e.pointerId);if(touches.size)return;const g=gesture;gesture=null;if(g&&!g.moved&&!g.multiple)placeAt(e.clientX,e.clientY).catch(e=>toast(e.message));};placement.onpointercancel=()=>{touches.clear();gesture=null;};
@@ -354,5 +370,21 @@ inner.document.addEventListener('change',event=>{const file=event.target?.files?
 inner.document.addEventListener('drop',event=>{const file=event.dataTransfer?.files?.[0];if(file&&/\.(dwg|dxf)$/i.test(file.name)){event.stopImmediatePropagation();event.preventDefault();importFile(file).catch(e=>toast(e.message));}},true);
 inner.document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();event.stopImmediatePropagation();task('Saving complete project…',saveAll).catch(e=>toast(e.message));}},true);
 window.sparkWorkspace={read,mutate,importFile,newDrawing,beginPlacement,save:()=>task('Saving complete project…',saveAll),get project(){return project?structuredClone(project):null;},get busy(){return busy||!!cadGestures?.active;},get ready(){return startupReady;},get touchActive(){return!!cadGestures?.active;},get selection(){return selection;}};
-try{const interrupted=interruptedImport();if(interrupted){clearInterruptedImport();localStorage.removeItem('sparkworld-cad-active');dialog('The previous drawing did not finish opening',`<p class="dialog-copy">${esc(interrupted.name||'The drawing')} stopped during ${esc(interrupted.stage||'opening')}. It has not been reopened automatically. Your original file and previously saved projects are unchanged.</p>`,[{label:'Choose another drawing',primary:true,run:()=>$('#file-input').click()},{label:'View saved projects',run:()=>openPanel('Projects')}]);}else{const id=localStorage.getItem('sparkworld-cad-active'),saved=id?await projectStore.get(id):null;if(saved){validateProject(saved,{clone:false});await restoreStoredProject(id,savedDrawingFile(saved),saved);}}}catch(error){toast('The last CAD project could not be restored: '+error.message);}finally{api().finishWorkspaceStartup();startupReady=true;}
+// A page refresh starts empty. Loading a saved CAD document is an explicit choice,
+// except for a one-shot reset-and-reload that the user just requested.
+function offerSavedDrawing(id,interrupted=null){
+ const recent=document.createElement('section');recent.className='cad-recent-drawing';recent.setAttribute('aria-label','Saved drawing');
+ const copy=document.createElement('p');copy.textContent=interrupted?`${interrupted.name||'The previous drawing'} did not finish opening. It has not been reopened. Saved projects and original files are unchanged.`:'Your last drawing is saved on this device. Open it when you are ready.';
+ const actions=document.createElement('div');recent.append(copy,actions);welcome.append(recent);
+ const add=(label,run)=>{const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=()=>Promise.resolve().then(run).catch(error=>toast(error.message));actions.append(button);return button;};
+ if(id&&!interrupted){let loading=false;const resume=add('Continue saved drawing',async()=>{if(loading)return;loading=true;resume.disabled=true;try{const saved=await projectStore.get(id);if(!saved){recent.remove();localStorage.removeItem('sparkworld-cad-active');throw Error('The last drawing is no longer saved. Choose a drawing from Projects.');}validateProject(saved,{clone:false});await restoreStoredProject(id,savedDrawingFile(saved),saved);}finally{loading=false;resume.disabled=false;}});}
+ add('View saved projects',()=>openPanel('Projects'));
+ add('Dismiss',()=>recent.remove());
+}
+try{
+ const interrupted=interruptedImport(),requested=sessionStorage.getItem('sparkworld-reload-request');sessionStorage.removeItem('sparkworld-reload-request');
+ if(interrupted){clearInterruptedImport();offerSavedDrawing(null,interrupted);}
+ else if(requested){const saved=await projectStore.get(requested);if(saved){validateProject(saved,{clone:false});await restoreStoredProject(requested,savedDrawingFile(saved),saved);}}
+ else{const id=localStorage.getItem('sparkworld-cad-active');if(id)offerSavedDrawing(id);}
+}catch(error){toast('The last CAD project could not be restored: '+error.message);}finally{api().finishWorkspaceStartup();startupReady=true;}
 setInterval(()=>poll().catch(e=>toast(e.message)),750);

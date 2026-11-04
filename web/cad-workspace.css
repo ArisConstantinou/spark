@@ -122,3 +122,5 @@
 
 #dialog.cad-load-confirmation .dialog-actions{display:flex;flex-direction:column;gap:10px}
 #dialog.cad-load-confirmation .dialog-actions button{width:100%;min-height:44px;white-space:normal}
+.cad-recent-drawing{max-width:620px;padding:16px;border:1px solid var(--line);border-radius:10px;background:#132735}
+.cad-recent-drawing>div{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:12px}.cad-recent-drawing button{font-size:14px}

@@ -71,7 +71,7 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  await page.locator('#point-details').click();check((await page.locator('#dialog-title').textContent())==='Electrical point','Selection exposes electrical properties only through Details');
  await page.locator('#point-note').fill('Κουζίνα — δοκιμή κοινής αποθήκευσης');await page.locator('#dialog-actions button').filter({hasText:'Save properties'}).click();await page.waitForFunction(()=>!sparkWorkspace.busy&&!document.querySelector('#dialog').open);
  await page.screenshot({path:path.join(out,'cad-workspace-desktop.png')});
- await page.reload();await ready();
+ await page.reload();await require('./continue-saved.cjs')(page);await ready();
  check((await page.evaluate(()=>Object.values(sparkWorkspace.project.points)[0].note)).includes('Κουζίνα'),'Reload restores CAD geometry and electrical notes from one project');
  check(await page.evaluate(async()=>!sparkWorkspace.project.dirty&&sparkWorkspace.project.savedRevision===(await sparkWorkspace.read({op:'state'})).revision),'An untouched restored project has a clean saved state');
  const reopened=(await cad({op:'query',handles:[point.handle],detail:'geometry'})).entities[0];check(reopened.position[0]===entity.position[0]+25&&reopened.position[1]===entity.position[1]+40,'Native movement survives complete-project save and reload');
@@ -81,7 +81,7 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  check(state.layouts.includes('Layout1'),'The source paper layout remains available through the host interface');
  await page.locator('#cad-own-layout').selectOption('Layout1');await page.waitForFunction(()=>!sparkWorkspace.busy&&sparkWorkspace.project?.activeLayout==='Layout1');
  check((await cad({op:'state'})).layout==='Layout1','Own layout selector activates the real source paper layout');
- await page.reload();await ready();check((await cad({op:'state'})).layout==='Layout1','Reload preserves the saved source layout');
+ await page.reload();await require('./continue-saved.cjs')(page);await ready();check((await cad({op:'state'})).layout==='Layout1','Reload preserves the saved source layout');
  await page.locator('#cad-own-layout').selectOption('Model');await page.waitForFunction(()=>!sparkWorkspace.busy&&sparkWorkspace.project?.activeLayout==='Model');
  await page.screenshot({path:path.join(out,'cad-workspace-full-tools.png')});
  }else{

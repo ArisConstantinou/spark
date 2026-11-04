@@ -45,11 +45,13 @@ async function ready(){for(let i=0;i<4;i++){
  },version.commit),'Public module imports share the versioned application state');
  check(await page.locator('#import').isEnabled(),'The real engine finishes startup and enables Open drawing');
  const choosing=page.waitForEvent('filechooser');await page.locator('#import').click();
+ if(await page.locator('#import-sources').count())await page.locator('#import-sources [data-source=device]').click();
  await (await choosing).setFiles({name:'Startup drawing.dxf',mimeType:'application/octet-stream',buffer:Buffer.from(dxf)});
  await page.waitForFunction(()=>sparkWorkspace.busy||sparkWorkspace.project);await ready();
  await page.waitForFunction(()=>sparkWorkspace.project?.name==='Startup drawing'&&!sparkWorkspace.busy);
  check(await page.evaluate(async()=>(await sparkWorkspace.read({op:'query',type:'Line',detail:'geometry'})).entities.some(entity=>entity.start[0]===10&&entity.end[1]===70)),'A drawing chosen through the mobile Open button reaches the real CAD engine');
  await page.reload({waitUntil:'commit'});await ready();
+ await require('./continue-saved.cjs')(page);await page.waitForFunction(()=>sparkWorkspace.project?.name==='Startup drawing'&&!sparkWorkspace.busy);
  check(await page.evaluate(()=>sparkWorkspace.project?.name==='Startup drawing'),'A cached startup restores the saved drawing');
  check(!errors.length,'Healthy startup and import have no unhandled browser errors');
  await context.close();

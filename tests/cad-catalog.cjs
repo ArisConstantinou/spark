@@ -30,7 +30,7 @@ module.exports=async function verifyCatalogue({browser,baseUrl,fixture,check}){
   check(await page.evaluate(()=>sparkWorkspace.project.activeLayout==='Model'&&!projectRequests.some(r=>r.cmd==='TILEMODE 1')),'A saved drawing already in Model restores without repeating the layout switch');
   const created=await page.evaluate(async()=>{const r=await sparkWorkspace.mutate({op:'entities_create',entities:[{type:'Line',start:[1,2,0],end:[30,45,0],layer:'0'}]});await sparkWorkspace.save();return (r.result||r).handles[0];});
   check(await page.evaluate(()=>sparkWorkspace.project.original.data!==sparkWorkspace.project.working.data),'An actual CAD edit creates a native working snapshot and keeps the original');
-  await page.reload();await ready('Ground floor');check(await page.evaluate(async handle=>(await sparkWorkspace.read({op:'query',handles:[handle]})).entities.length===1,created),'The native edit survives a saved-project reload');
+  await page.reload();await require('./continue-saved.cjs')(page);await ready('Ground floor');check(await page.evaluate(async handle=>(await sparkWorkspace.read({op:'query',handles:[handle]})).entities.length===1,created),'The native edit survives a saved-project reload');
   // Emulate a lost tab after the real restore path records its marker.
   await page.evaluate(()=>{const api=document.querySelector('#cad-frame').contentWindow.ocsControl,request=api.request.bind(api);api.request=(value,options)=>value.op==='open'?new Promise(()=>{}):request(value,options);});
   await page.locator('#electrical-nav').click();await page.locator('button[data-project]').filter({hasText:/^Upper floor/}).click();await page.waitForFunction(()=>JSON.parse(sessionStorage.getItem('sparkworld-opening-drawing')||'null')?.stage==='Opening the saved CAD drawing');
@@ -39,7 +39,7 @@ module.exports=async function verifyCatalogue({browser,baseUrl,fixture,check}){
   await page.getByRole('button',{name:'Cancel',exact:true}).click();
   check(await page.evaluate(()=>sparkWorkspace.busy&&!!sessionStorage.getItem('sparkworld-opening-drawing')),'Cancelling reset keeps the existing load without starting another one');
   await page.reload();await page.waitForFunction(()=>window.sparkWorkspace?.ready,{},{timeout:120000});
-  check(await page.locator('#dialog-title').textContent()==='The previous drawing did not finish opening'&&await page.evaluate(()=>!sparkWorkspace.project),'An interrupted saved open is not automatically retried on the next page load');
+  check(await page.locator('.cad-recent-drawing').isVisible()&&await page.evaluate(()=>!sparkWorkspace.project&&!document.querySelector('#dialog').open),'An interrupted saved open remains an inline notice without an automatic retry or blocking dialog');
   await page.getByRole('button',{name:'View saved projects',exact:true}).click();await page.locator('button[data-project]').filter({hasText:/^Upper floor/}).waitFor();await page.locator('button[data-project]').filter({hasText:/^Ground floor/}).waitFor();check(!errors.length,'Recovery leaves both saved drawings available without unhandled errors');
   await page.setViewportSize({width:1440,height:900});
   await page.locator('button[data-project]').filter({hasText:/^Upper floor/}).click();
@@ -55,7 +55,7 @@ module.exports=async function verifyCatalogue({browser,baseUrl,fixture,check}){
   }
   await page.waitForFunction(()=>!sparkWorkspace.busy&&sparkWorkspace.project?.activeLayout==='Layout1');
   await page.reload();
-  await ready('Upper floor');
+  await require('./continue-saved.cjs')(page);await ready('Upper floor');
   check(await page.evaluate(async()=>sparkWorkspace.project.activeLayout==='Layout1'&&(await sparkWorkspace.read({op:'state'})).layout==='Layout1'),'Restoring a project keeps its saved paper layout');
   await observe();
   await page.setViewportSize({width:390,height:844});

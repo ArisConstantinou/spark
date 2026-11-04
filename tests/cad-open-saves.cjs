@@ -40,7 +40,7 @@ module.exports=async function verifyOpenSaves({browser,baseUrl,check}){
   },second),'The pending edit has a real DWG snapshot and retains its original DXF');
   const all=await page.evaluate(async()=>{const ids=(await (await import(new URL('workspace-store.js',location.href))).projectStore.catalog()).map(project=>project.id);openSaves.writes=[];await sparkWorkspace.save();return ids.every(id=>openSaves.writes.includes(id));});
   check(all,'Explicit Save still checks and saves every open project');
-  await page.evaluate(id=>localStorage.setItem('sparkworld-cad-active',id),second);await page.reload();await ready('Second drawing');
+  await page.evaluate(id=>localStorage.setItem('sparkworld-cad-active',id),second);await page.reload();await require('./continue-saved.cjs')(page);await ready('Second drawing');
   check(await page.evaluate(async handle=>(await sparkWorkspace.read({op:'query',handles:[handle],detail:'geometry'})).entities.some(entity=>entity.start?.[0]===200&&entity.end?.[1]===500),handle),'The edit saved before opening another file survives a full reload');
   check(!errors.length,'Selective pre-open saving produces no unhandled browser errors');
  }finally{await context.close();}

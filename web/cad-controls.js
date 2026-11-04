@@ -19,7 +19,7 @@ export async function mountCadControls({read,write,task,save,dialog,toast,frame,
  const layers=document.querySelector('#workspace-layers');if(layers)host.querySelector('.cad-toolbar-utilities').prepend(layers);
  const closeMenus=()=>syncUtilities();document.addEventListener('pointerdown',event=>{if(!host.contains(event.target))closeMenus();});frame.addEventListener('focus',closeMenus);
  layers?.addEventListener('click',closeMenus);
- for(const [id,label,glyph]of [['import','Open drawing','M3 7h7l2 3h9v10H3zM3 10V5h7l2 2'],['save','Save project','M4 3h13l3 3v15H4zM8 3v6h8V3M8 21v-8h8v8']]){const button=document.getElementById(id);button.setAttribute('aria-label',label);button.title=label;button.innerHTML=`<svg class="cad-header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${glyph}"/></svg><span>${label}</span>`;}
+ for(const [id,label,glyph]of [['import','Import','M3 7h7l2 3h9v10H3zM3 10V5h7l2 2'],['save','Save project','M4 3h13l3 3v15H4zM8 3v6h8V3M8 21v-8h8v8']]){const button=document.getElementById(id);button.setAttribute('aria-label',id==='import'?'Import drawing':label);button.title=id==='import'?'Import drawing':label;button.innerHTML=`<svg class="cad-header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${glyph}"/></svg><span>${label}</span>`;}
  const command=document.createElement('form');command.className='cad-own-command';command.setAttribute('aria-label','CAD command input');command.innerHTML='<div id="cad-own-prompt" role="status">Choose a drawing tool or enter a CAD command.</div><div class="cad-command-row"><label for="cad-own-input">Command</label><input id="cad-own-input" autocomplete="off" spellcheck="false" aria-label="CAD command or next value"><button type="submit">Enter</button><button type="button" id="cad-own-cancel">Cancel</button></div>';
  frame.closest('.studio-frame-wrap').after(command);
  const input=command.querySelector('input');
@@ -71,7 +71,7 @@ export async function mountCadControls({read,write,task,save,dialog,toast,frame,
    await task('Applying CAD properties…',async()=>{for(const {p,value}of changes){const s=await read({op:'state'});if(s.document_id!==pinned.document_id||JSON.stringify(s.selection)!==JSON.stringify(pinned.selection))throw Error('The selected drawing or objects changed. Reopen Details.');await read({op:'property',document_id:pinned.document_id,revision:s.revision,request_id:'property-'+crypto.randomUUID(),field:p.id,value});}await save();});
   }},{label:'Close',run:()=>{}}]);
  }
- const layoutLab=mountLayoutLab({host,command,frame,tools:Object.fromEntries(Object.entries(tools).map(([key,list])=>[key,list.filter(([,id])=>available.has(id))])),icon,execute,toast});
+ const layoutLab=mountLayoutLab({host,command,frame,tools:Object.fromEntries(Object.entries(tools).map(([key,list])=>[key,list.filter(([,id])=>available.has(id))])),icon,execute,toast,previewGroups:()=>{for(const name of Object.keys(tools))openGroups.add(name);renderGroups();}});
  for(const button of host.querySelectorAll('[data-cad-tab]'))button.addEventListener('click',()=>layoutLab.collapseLegacy(button.dataset.cadTab));
  renderGroups();return{update,properties,execute,openSettings:layoutLab.open,cancelPlacement:annotations.cancel,element:host,commandElement:command};
 }
