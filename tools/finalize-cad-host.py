@@ -29,7 +29,7 @@ html = html.replace('</head>', '<link rel="icon" href="./logo.svg" type="image/s
 html_file.write_text(html, encoding="utf-8")
 (output / "videos.json").write_text("[]\n", encoding="utf-8")
 shutil.copyfile(source / "LICENSE", output / "LICENSE-GPL-3.0.txt")
-patch = subprocess.check_output(["git", "diff", "--", "src/app/view/mod.rs", "src/app/control/mod.rs", "src/app/control/entities.rs", "src/io/web_recent.rs", "src/io/web_autosave.rs", "src/app/update/mod.rs", "src/app/mod.rs", "src/io/web_worker.rs", "src/io/mod.rs", "src/app/update/file.rs", "src/scene/camera_ops.rs", "src/scene/mod.rs", "src/scene/view/viewport_pane.rs", "src/scene/view/render.rs", "scripts/build-web-worker.sh", "Cargo.toml", "Cargo.lock"], cwd=source)
+patch = subprocess.check_output(["git", "diff", "--", "src/app/view/mod.rs", "src/app/control/mod.rs", "src/app/control/entities.rs", "src/io/web_recent.rs", "src/io/web_autosave.rs", "src/app/update/mod.rs", "src/app/mod.rs", "src/io/web_worker.rs", "src/io/mod.rs", "src/app/update/file.rs", "src/scene/camera_ops.rs", "src/scene/mod.rs", "src/scene/view/viewport_pane.rs", "src/scene/view/render.rs", "src/scene/pipeline/mod.rs", "scripts/build-web-worker.sh", "Cargo.toml", "Cargo.lock"], cwd=source)
 (output / "SPARKWORLD-SOURCE.patch").write_bytes(patch)
 upstream = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
 codec_metadata = {}

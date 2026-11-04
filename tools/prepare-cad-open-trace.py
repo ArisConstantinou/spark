@@ -12,6 +12,7 @@ SOURCES = {
     "src/scene/mod.rs": "02c4ad573512ba3196b456933976de8adfe4e923882f2ab8964636a9a7ce684b",
     "src/scene/view/viewport_pane.rs": "c000e4d49d8a56542bb45f5de6c24032178d092b5515c7ce54ea5074ec00f798",
     "src/scene/view/render.rs": "f4302951a0209dc8f61e560d2a62d210442acacf3cec9ce7ea1f7882c0e3580b",
+    "src/scene/pipeline/mod.rs": "f2541ea0e953afd33ff5dd9f787371bd71730ea053f1fd10c1aacf94caca19da",
 }
 
 
@@ -193,10 +194,71 @@ def trace_render(source):
     return source
 
 
+def mark_gpu_once(source, anchor, phase, *, viewports=False, after=False):
+    """Observe the first nonempty GPU frame without changing render inputs."""
+    if source.count(anchor) != 1:
+        raise ValueError(f"CAD GPU trace anchor changed: {phase}")
+    indent = anchor[:len(anchor) - len(anchor.lstrip())]
+    condition = "!self.viewports.is_empty()" if viewports else "true"
+    lines = [
+        '#[cfg(target_arch = "wasm32")]', '{',
+        '    use std::sync::atomic::{AtomicBool, Ordering};',
+        '    static LOGGED: AtomicBool = AtomicBool::new(false);',
+        f'    if {condition} && !LOGGED.swap(true, Ordering::Relaxed) {{',
+        f'        web_sys::console::debug_1(&"SPARK_OPEN_TRACE {phase}".into());',
+        '    }', '}',
+    ]
+    block = '\n'.join(indent + line for line in lines)
+    return source.replace(anchor, anchor + '\n' + block if after else block + '\n' + anchor, 1)
+
+
+def trace_pipeline(source):
+    def transform(body):
+        for anchor, phase in (
+            ('        let uniform_buffer = device.create_buffer(', 'gpu-ctor-start'),
+            ('        let wire_shader = device.create_shader_module(', 'gpu-ctor-shared-ready'),
+            ('        let wipeout_shader = device.create_shader_module(', 'gpu-ctor-wires-ready'),
+            ('        let hatch_gpu = hatch_gpu::HatchGpu::new(', 'gpu-ctor-shapes-ready'),
+            ('        let mesh_shader = device.create_shader_module(', 'gpu-ctor-hatches-ready'),
+            ('        let face3d_shader = device.create_shader_module(', 'gpu-ctor-meshes-ready'),
+            ('        let image_shader = device.create_shader_module(', 'gpu-ctor-faces-ready'),
+            ('        let point_cloud_bgl1 = point_cloud_gpu::params_layout(device);', 'gpu-ctor-images-ready'),
+            ('        let (circle_pipeline, circle_xray_pipeline) = circle_gpu::create_pipelines(', 'gpu-ctor-point-clouds-ready'),
+            ('        let viewcube = ViewCubePipeline::new(device, queue, format);', 'gpu-ctor-analytical-ready'),
+            ('        let blit_shader = device.create_shader_module(', 'gpu-ctor-viewcube-ready'),
+            ('        Self {\n            background_pipeline,', 'gpu-ctor-finished'),
+        ):
+            body = mark_gpu_once(body, anchor, phase)
+        return body
+    return within(source, 'impl Pipeline {', '    pub fn upload_block_wires(', transform)
+
+
+def trace_gpu_prepare(source):
+    def transform(body):
+        for anchor, phase, after in (
+            ('        let nav_prepare_started = iced::time::Instant::now();', 'gpu-prepare-start', False),
+            ('        let slots = pipeline.resolve_slots(device, queue, &instance_ids);', 'gpu-slots-start', False),
+            ('        let slots = pipeline.resolve_slots(device, queue, &instance_ids);', 'gpu-slots-ready', True),
+            ('            inner.upload_uniforms(device, queue, &uniforms);', 'gpu-uniforms-ready', True),
+            ('            if hatch_changed || fill_changed {', 'gpu-hatches-start', False),
+            ('            let preview_hatch_changed = inner', 'gpu-hatches-ready', False),
+            ('            let text_source_changed = inner', 'gpu-images-ready', False),
+            ('            if vp.wire_content_id != inner.cached_wire_id {', 'gpu-wires-start', False),
+            ('            let sel_key = (vp.wire_content_id, vp.selection_generation);', 'gpu-wires-ready', False),
+            ('            inner.cached_selection = sel_key;', 'gpu-selection-ready', True),
+            ('        let prepare_ms = nav_prepare_started.elapsed().as_secs_f64() * 1000.0;', 'gpu-uploads-ready', False),
+            ('        report_gpu_live(pipeline);', 'gpu-prepare-finished', True),
+        ):
+            body = mark_gpu_once(body, anchor, phase, viewports=True, after=after)
+        return body
+    return within(source, '    fn prepare(', '    fn render(', transform)
+
+
 def prepare(root):
     changes = {}
     transforms = (trace_worker, trace_load, trace_install,
-                  lambda source: trace_wire_assembly(trace_resident_geometry(source)), trace_viewport, trace_render)
+                  lambda source: trace_wire_assembly(trace_resident_geometry(source)), trace_viewport,
+                  lambda source: trace_gpu_prepare(trace_render(source)), trace_pipeline)
     for (relative, digest), transform in zip(SOURCES.items(), transforms, strict=True):
         path = root / relative
         raw = path.read_bytes()
