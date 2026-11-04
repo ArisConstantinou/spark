@@ -11,6 +11,7 @@ SOURCES = {
     "src/app/update/file.rs": "c73d5dd5bb86ae0b16248c7c6c333e2dfcdd4927982a5489e6a3e37b588db687",
     "src/scene/mod.rs": "02c4ad573512ba3196b456933976de8adfe4e923882f2ab8964636a9a7ce684b",
     "src/scene/view/viewport_pane.rs": "c000e4d49d8a56542bb45f5de6c24032178d092b5515c7ce54ea5074ec00f798",
+    "src/scene/view/render.rs": "f4302951a0209dc8f61e560d2a62d210442acacf3cec9ce7ea1f7882c0e3580b",
 }
 
 
@@ -167,10 +168,35 @@ def trace_viewport(source):
     return within(source, "    fn draw(", "    fn update(", transform)
 
 
+
+def trace_render(source):
+    # Resident wires are only one part of the first frame. Keep all content
+    # and rendering behavior unchanged while isolating the remaining work.
+    for anchor, phase in (
+        ("        let source_gen = self.last_model_wire_gen.get();", "frame-style-start"),
+        ("        let base_wire_patch = self.model_wire_patch_for(base_wire_content_id);", "frame-style-finished"),
+        ("        let (face3d_wires, other_arc) = {", "frame-face-split-start"),
+        ("        let all_wires = other_arc;", "frame-face-split-finished"),
+        ("        self.apply_document_lighting(&mut uniforms, lighting_block, &vp_frozen, inst);", "frame-lighting-start"),
+        ("        let screen_rect = Rectangle {", "frame-lighting-finished"),
+        ("        let (hatches, wipeout_hatches, paper_images) = if inst.paper_sheet {", "frame-hatches-start"),
+        ("        let viewport_scale = if inst.paper_sheet {", "frame-hatches-finished"),
+        ("        let images = if let Some(images) = paper_images {", "frame-hatch-style-finished"),
+        ("        let meshes = if inst.paper_sheet {", "frame-images-finished"),
+        ("        let text_source_key: u64 = if inst.tile_idx.is_some() {", "frame-meshes-finished"),
+        ("        let draw_depths = if inst.render_mode == codec::entities::ViewportRenderMode::Wireframe3D {", "frame-depth-start"),
+        ("        let text_verts =\n", "frame-depth-finished"),
+        ("        let preview_text_verts = {", "frame-text-finished"),
+        ("        Some(ViewportData {", "frame-data-ready"),
+    ):
+        source = mark_large_frame(source, anchor, phase, "self")
+    return source
+
+
 def prepare(root):
     changes = {}
     transforms = (trace_worker, trace_load, trace_install,
-                  lambda source: trace_wire_assembly(trace_resident_geometry(source)), trace_viewport)
+                  lambda source: trace_wire_assembly(trace_resident_geometry(source)), trace_viewport, trace_render)
     for (relative, digest), transform in zip(SOURCES.items(), transforms, strict=True):
         path = root / relative
         raw = path.read_bytes()
