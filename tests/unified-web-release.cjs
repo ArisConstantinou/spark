@@ -20,6 +20,7 @@ const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
  await require('./cad-project-resume.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',check});
  await require('./cad-hidden-recovery.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',fixture:path.resolve(process.env.SPARK_FIXTURE||'.out/layer-fixture.dwg'),out,check});
  report.nativeTouch=await require('./cad-native-touch.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',out,check});
+ await require('./cad-unit-confirmation.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',out,check});
  await require('./cad-catalog.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',fixture:path.resolve(process.env.SPARK_FIXTURE||'.out/layer-fixture.dwg'),check});
  await require('./cad-context.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',fixture:path.resolve(process.env.SPARK_FIXTURE||'.out/layer-fixture.dwg'),out,check});
  await require('./cad-polling.cjs')({browser,baseUrl:'http://127.0.0.1:5173/spark/',fixture:path.resolve(process.env.SPARK_FIXTURE||'.out/layer-fixture.dwg'),out,check});
