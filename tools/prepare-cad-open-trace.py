@@ -13,6 +13,7 @@ SOURCES = {
     "src/scene/view/viewport_pane.rs": "c000e4d49d8a56542bb45f5de6c24032178d092b5515c7ce54ea5074ec00f798",
     "src/scene/view/render.rs": "f4302951a0209dc8f61e560d2a62d210442acacf3cec9ce7ea1f7882c0e3580b",
     "src/scene/pipeline/mod.rs": "f2541ea0e953afd33ff5dd9f787371bd71730ea053f1fd10c1aacf94caca19da",
+    "src/scene/pipeline/hatch_gpu/texture.rs": "5b9aad92b3845d0b3526603c0a821ff6c00e2cbbadb080bcd18ef6a64fba6de1",
 }
 
 
@@ -254,11 +255,25 @@ def trace_gpu_prepare(source):
     return within(source, '    fn prepare(', '    fn render(', transform)
 
 
+def tighten_hatch_texture(source):
+    old = "        let width = DATA_TEX_WIDTH;"
+    new = """        // Keep every family/dash texel, with the shader's existing dynamic
+        // row stride. Small patterns do not need 1024 texels of zero padding.
+        // Retain power-of-two dimensions and a 256-byte minimum row pitch.
+        let width = (texels.len() as u32)
+            .clamp(16, DATA_TEX_WIDTH)
+            .next_power_of_two();"""
+    if source.count(old) != 1:
+        raise ValueError("Hatch data texture allocation anchor changed")
+    return source.replace(old, new, 1)
+
+
 def prepare(root):
     changes = {}
     transforms = (trace_worker, trace_load, trace_install,
                   lambda source: trace_wire_assembly(trace_resident_geometry(source)), trace_viewport,
-                  lambda source: trace_gpu_prepare(trace_render(source)), trace_pipeline)
+                  lambda source: trace_gpu_prepare(trace_render(source)), trace_pipeline,
+                  tighten_hatch_texture)
     for (relative, digest), transform in zip(SOURCES.items(), transforms, strict=True):
         path = root / relative
         raw = path.read_bytes()
