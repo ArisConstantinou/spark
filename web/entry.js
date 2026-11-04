@@ -1,7 +1,9 @@
 // The web product has one native CAD workspace. Earlier image drawings retain
 // their own compatible route; existing Windows delivery remains unchanged.
 import {showVersion} from './version.js';
+import {showCadStartupFailure} from './cad-startup.js';
 const workspace=new URLSearchParams(location.search).get('workspace');
+try{
 if(!globalThis.chrome?.webview&&!['image','legacy'].includes(workspace)){
  const response=await fetch(new URL('./cad-studio.html',import.meta.url));
  if(!response.ok)throw Error('The CAD workspace could not load.');
@@ -13,3 +15,4 @@ if(!globalThis.chrome?.webview&&!['image','legacy'].includes(workspace)){
  const workspaceStyle=document.createElement('link');workspaceStyle.rel='stylesheet';workspaceStyle.href=new URL('./cad-workspace.css',import.meta.url);document.head.append(workspaceStyle);
  await import('./cad-studio.js');await import('./cad-workspace.js');
 }else{showVersion();await import('./app.js');}
+}catch(error){showCadStartupFailure(error);}

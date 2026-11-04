@@ -9,8 +9,8 @@
 <body class="cad-studio-page">
  <header class="topbar">
   <a class="brand" href="./"><div class="brand-lockup"><strong>Spark<span class="brand-word">World</span></strong><small>Created by Aris</small><span class="app-version" data-site-version>Development build</span></div></a>
-  <div class="studio-heading"><strong>CAD Studio</strong><span id="studio-document">Native DWG workspace</span></div>
-  <div class="header-actions"><button id="import" disabled>Open drawing</button><button id="save" class="primary" disabled>Save DWG copy</button></div>
+  <div class="studio-heading"><strong>CAD Studio</strong><span id="studio-document" hidden>Native DWG workspace</span></div>
+  <div class="header-actions"><button id="import" aria-label="Open drawing" title="Open drawing" disabled><svg class="cad-header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 3h9v10H3zM3 10V5h7l2 2"/></svg><span>Open drawing</span></button><button id="save" class="primary" aria-label="Save drawing" title="Save drawing" disabled><svg class="cad-header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM8 3v6h8V3M8 21v-8h8v8"/></svg><span>Save DWG copy</span></button></div>
  </header>
  <main class="studio-workspace">
   <nav class="studio-rail" aria-label="Workspace navigation">
@@ -23,7 +23,7 @@
   <section class="studio-editor" aria-label="Native DWG editor">
    <div class="studio-context"><span><i id="engine-dot"></i><strong id="engine-status" role="status">Loading CAD engine…</strong></span><span id="document-status">Files stay on this device</span></div>
    <div class="studio-frame-wrap"><iframe id="cad-frame" title="Open CAD Studio drawing editor" allow="" referrerpolicy="no-referrer"></iframe>
-    <div id="studio-loading" class="studio-loading" role="status"><span class="spinner"></span><h1>Opening your CAD workspace</h1><p>The local WebAssembly engine is loading.<br>DWG and DXF files are processed on your device.</p><button id="welcome-import" hidden>Open drawing</button></div>
+    <div id="studio-loading" class="studio-loading" role="status"><span class="spinner"></span><h1>Opening your CAD workspace</h1><p>The local WebAssembly engine is loading.<br>DWG and DXF files are processed on your device.</p><button id="retry-cad" hidden>Retry CAD engine</button><button id="welcome-import" hidden>Open drawing</button></div>
    </div>
   </section>
  </main>

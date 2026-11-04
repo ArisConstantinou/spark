@@ -1,0 +1,45 @@
+name: Verify mobile CAD startup
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, codex/mobile-startup]
+    paths: ['web/**', 'tests/cad-startup.cjs', 'tools/cad-host-component.json', '.github/workflows/browser-startup.yml']
+permissions:
+  contents: read
+jobs:
+  mobile-startup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.out/qa-browsers
+      SPARK_BROWSER: ${{ matrix.browser }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare the pinned native CAD component
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 tools/prepare-locked-cad-host.py --output .out/site/app
+          cp -a web/. .out/site/
+      - name: Install the browser verifier
+        run: |
+          npm install --prefix .out/qa --no-audit --no-fund playwright@1.62.1
+          .out/qa/node_modules/.bin/playwright install --with-deps "$SPARK_BROWSER"
+      - name: Verify startup, file selection, failures and retry
+        run: node tests/cad-startup.cjs
+      - name: Report the browser outcome
+        if: always()
+        run: cat ".out/test-results/cad-startup-$SPARK_BROWSER.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-startup-${{ matrix.browser }}
+          path: .out/test-results
+          retention-days: 3
