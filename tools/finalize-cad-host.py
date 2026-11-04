@@ -51,7 +51,7 @@ if args.codec_source:
     shutil.copyfile(codec / "LICENSE", output / "LICENSE-acadrust-MPL-2.0.txt")
     (output / "acadrust-source" / "README.txt").write_text(
         "Modified Source Code Form, MPL-2.0. Original source and all other files:\n"
-        "https://github.com/HakanSeven12/acadrust/tree/" + codec_revision + "\n"
+        "https://github.com/hakanaktt/acadrust/tree/" + codec_revision + "\n"
         "Modified files: " + writer + "; " + reader + "\n"
         "SparkWorld change: emit the background fields required by R2018 MTEXT text-frame flags.\n"
         "Read MTEXT annotativeness from its retained AcadAnnotative DXF XDATA.\n"
