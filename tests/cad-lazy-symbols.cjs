@@ -23,6 +23,7 @@ module.exports=async({page,cad,check})=>{
  check(!afterUndo.some(entity=>entity.type==='Block Reference'&&entity.block===definitions[last.type]),'Undo removes the final placed symbol before serialization');
  await page.evaluate(()=>sparkWorkspace.save());
  await page.reload();
+ await require('./continue-saved.cjs')(page);
  for(let i=0;i<4;i++){
   const ready=await page.waitForFunction(()=>{if(document.querySelector('#dialog')?.open&&document.querySelector('#dialog-title')?.textContent==='CAD graphics notice')return 'graphics';if(window.sparkWorkspace?.project?.working&&!sparkWorkspace.busy)return 'ready';},{},{timeout:120000});
   if(await ready.jsonValue()==='ready')break;
