@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main, codex/mobile-startup]
-    paths: ['web/**', 'tests/cad-startup.cjs', 'tools/cad-host-component.json', '.github/workflows/browser-startup.yml']
+    paths: ['web/**', 'tests/cad-startup.cjs', 'tools/cad-host-component.json', 'tools/prepare-web-release.py', '.github/workflows/browser-startup.yml']
 permissions:
   contents: read
 jobs:
@@ -27,7 +27,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 tools/prepare-locked-cad-host.py --output .out/site/app
-          cp -a web/. .out/site/
+          python3 tools/prepare-web-release.py --output .out/site --commit "$GITHUB_SHA"
       - name: Install the browser verifier
         run: |
           npm install --prefix .out/qa --no-audit --no-fund playwright@1.62.1

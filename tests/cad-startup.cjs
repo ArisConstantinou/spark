@@ -20,6 +20,8 @@ async function ready(){for(let i=0;i<4;i++){
  browser=await playwright[browserName].launch({headless:true,...(browserName==='chromium'&&process.env.SPARK_CHROME?{executablePath:process.env.SPARK_CHROME}:{})});
  const mobile={viewport:{width:390,height:844},deviceScaleFactor:2,isMobile:true,hasTouch:true,serviceWorkers:'block'};
  const context=await browser.newContext(mobile),errors=[];let releaseDownload;
+ let staleAssets=0;
+ await context.route(/\/spark\/(?:entry\.js|style\.css)$/,route=>{staleAssets++;return route.fulfill({contentType:route.request().url().endsWith('.css')?'text/css':'text/javascript',body:'throw new Error("Stale asset used")'});});
  const download=new Promise(resolve=>releaseDownload=resolve);
  await context.route('**/*_bg.wasm',async route=>{if(route.request().method()==='GET')await download;await route.continue();});
  page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
@@ -33,6 +35,13 @@ async function ready(){for(let i=0;i<4;i++){
  }
  await page.screenshot({path:path.join(out,'cad-startup-'+browserName+'.png')});
  releaseDownload();await ready();
+ const version=await (await context.request.get(base+'version.json')).json(),html=await (await context.request.get(base)).text();
+ check(!staleAssets&&html.includes('data-site-version>v'+version.version+' · '+version.commit.slice(0,7)+'<'),'The released page includes its version and bypasses stale entry scripts and styles');
+ check(await page.evaluate(async commit=>{
+  const root=await import(new URL('workspace-store.js',document.baseURI));
+  const versioned=await import(new URL('workspace-store.'+commit+'.js',document.baseURI));
+  return root.projectStore===versioned.projectStore;
+ },version.commit),'Public module imports share the versioned application state');
  check(await page.locator('#import').isEnabled(),'The real engine finishes startup and enables Open drawing');
  const choosing=page.waitForEvent('filechooser');await page.locator('#import').click();
  await (await choosing).setFiles({name:'Startup drawing.dxf',mimeType:'application/octet-stream',buffer:Buffer.from(dxf)});

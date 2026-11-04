@@ -61,13 +61,12 @@ jobs:
       - name: Assemble the web release
         run: |
           mkdir -p .out/site/engine
-          cp -a web/. .out/site/
+          python3 tools/prepare-web-release.py --output .out/site --commit "$GITHUB_SHA"
           cp -a .out/browser/wwwroot/. .out/site/engine/
           find .out/site/engine -type f \( -name '*.br' -o -name '*.gz' -o -name '*.pdb' \) -delete
           cp THIRD_PARTY_NOTICES.md LICENSE .out/site/
           cp -a licenses .out/site/
           touch .out/site/.nojekyll
-          python -c 'import json,os; core=json.load(open("tools/cad-host-component.json")); package=json.load(open("package.json")); open(".out/site/version.json","w").write(json.dumps({"version":package["version"],"commit":os.environ["GITHUB_SHA"],"cad_editor":"SparkWorld viewport host","cad_core":core["integration_commit"]}))'
       - name: Install pinned browser verification tools
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.out/qa-browsers
