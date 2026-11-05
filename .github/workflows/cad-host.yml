@@ -49,6 +49,12 @@ jobs:
         run: |
           python3 tools/prepare-cad-host.py .out/cad-source
           sh -n .out/cad-source/scripts/build-web-worker.sh
+      - name: Verify copy-on-write text storage semantics
+        run: |
+          rustc --edition=2021 --test tools/shared-wire-vec.rs -o .out/shared-wire-tests
+          .out/shared-wire-tests
+      - name: Share immutable cached glyph geometry
+        run: python3 tools/prepare-shared-text.py .out/cad-source
       - name: Add native open diagnostics
         if: inputs.trace_open
         run: python3 tools/prepare-cad-open-trace.py .out/cad-source
