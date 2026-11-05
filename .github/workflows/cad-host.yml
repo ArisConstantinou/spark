@@ -49,6 +49,8 @@ jobs:
         run: |
           python3 tools/prepare-cad-host.py .out/cad-source
           sh -n .out/cad-source/scripts/build-web-worker.sh
+      - name: Bound provisional geometry and derived glyph cache memory
+        run: python3 tools/prepare-render-memory.py .out/cad-source
       - name: Add native open diagnostics
         if: inputs.trace_open
         run: python3 tools/prepare-cad-open-trace.py .out/cad-source

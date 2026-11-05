@@ -29,7 +29,7 @@ html = html.replace('</head>', '<link rel="icon" href="./logo.svg" type="image/s
 html_file.write_text(html, encoding="utf-8")
 (output / "videos.json").write_text("[]\n", encoding="utf-8")
 shutil.copyfile(source / "LICENSE", output / "LICENSE-GPL-3.0.txt")
-patch = subprocess.check_output(["git", "diff", "--", "src/app/view/mod.rs", "src/app/control/mod.rs", "src/app/control/entities.rs", "src/io/web_recent.rs", "src/io/web_autosave.rs", "src/app/update/mod.rs", "src/app/mod.rs", "src/io/web_worker.rs", "src/io/mod.rs", "src/app/update/file.rs", "src/scene/camera_ops.rs", "scripts/build-web-worker.sh", "Cargo.toml", "Cargo.lock"], cwd=source)
+patch = subprocess.check_output(["git", "diff", "--", "src", "scripts/build-web-worker.sh", "Cargo.toml", "Cargo.lock"], cwd=source)
 (output / "SPARKWORLD-SOURCE.patch").write_bytes(patch)
 upstream = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
 codec_metadata = {}
@@ -68,7 +68,9 @@ if args.codec_source:
     "analytics and component service worker disabled; capability-safe optional browser storage; "
     "recent-cache failures do not invalidate successful opens/downloads; "
     "optional initial layout with native saved camera or fit for an untouched model view; "
-    "the completed parser is released before reconstructing the model.\n", encoding="utf-8")
+    "the completed parser is released before reconstructing the model; "
+    "obsolete provisional atlas geometry and per-source glyph batches are released before replacement, "
+    "and derived glyph collections reserve their exact required capacity.\n", encoding="utf-8")
 files = {p.relative_to(output).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
          for p in sorted(output.rglob("*")) if p.is_file() and p.name != ".component-manifest.json"}
 manifest = {"upstream_commit": upstream, "presentation": "sparkworld-viewport-host",
