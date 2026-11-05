@@ -51,6 +51,8 @@ jobs:
           sh -n .out/cad-source/scripts/build-web-worker.sh
       - name: Bound provisional geometry and derived glyph cache memory
         run: python3 tools/prepare-render-memory.py .out/cad-source
+      - name: Prepare bounded exact glyph spatial queries
+        run: python3 tools/prepare-sdf-bake.py .out/cad-source --harness .out/sdf-equivalence.rs
       - name: Add native open diagnostics
         if: inputs.trace_open
         run: python3 tools/prepare-cad-open-trace.py .out/cad-source
@@ -117,6 +119,10 @@ jobs:
           trunk --version
           wasm-bindgen --version
           df -h .
+      - name: Verify exact glyph bytes and bounded lookup fallback
+        run: |
+          rustc --edition=2021 -O --test .out/sdf-equivalence.rs -o .out/sdf-equivalence
+          .out/sdf-equivalence --test-threads=1 --nocapture
       - name: Compile only the web component
         working-directory: .out/cad-source
         run: trunk build --locked --release --public-url ./ --dist "$GITHUB_WORKSPACE/.out/site/app" --html-output index.html web-app.html

@@ -71,7 +71,9 @@ if args.codec_source:
     "the completed parser is released before reconstructing the model; "
     "obsolete provisional atlas geometry and per-source glyph batches are released before replacement, "
     "and derived glyph collections reserve their exact required capacity; "
-    "bounded native performance snapshots and independent trace configuration are available without drawing edits.\n", encoding="utf-8")
+    "bounded native performance snapshots and independent trace configuration are available without drawing edits; "
+    "glyph distance and fill queries use bounded spatial buckets with original predicates and raster parameters, "
+    "retaining the complete original scan as the bounded-allocation fallback.\n", encoding="utf-8")
 files = {p.relative_to(output).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
          for p in sorted(output.rglob("*")) if p.is_file() and p.name != ".component-manifest.json"}
 manifest = {"upstream_commit": upstream, "presentation": "sparkworld-viewport-host",
