@@ -64,7 +64,7 @@ if args.codec_source:
     "Upstream: https://github.com/HakanSeven12/OpenCADStudio/tree/" + upstream + "\n"
     "Source patch: SPARKWORLD-SOURCE.patch. Build and integration scripts: "
     "https://github.com/ArisConstantinou/spark/tree/codex/cad-layer-visibility .\n"
-    "Changes: optional viewport-only presentation; state hosted_view/layouts; atomic lazy electrical placement; worker target path; same-origin CSP; "
+    "Changes: SparkWorld web viewport with unused application chrome compiled out; state hosted_view/layouts; atomic lazy electrical placement; worker target path; same-origin CSP; "
     "analytics and component service worker disabled; capability-safe optional browser storage; "
     "recent-cache failures do not invalidate successful opens/downloads; "
     "optional initial layout with native saved camera or fit for an untouched model view; "

@@ -60,17 +60,12 @@ def transform_view(text):
     return text + '''
 
 /// SparkWorld owns application chrome; preserve native drawing/input/modals.
+#[inline(always)]
 pub(crate) fn spark_hosted_view() -> bool {
-    #[cfg(target_arch = "wasm32")]
-    {
-        static HOSTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        *HOSTED.get_or_init(|| web_sys::window()
-            .and_then(|window| window.location().search().ok())
-            .is_some_and(|query| query.trim_start_matches('?')
-                .split('&').any(|part| part == "spark_host=1")))
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    { false }
+    // This distributed web component belongs to SparkWorld's own interface.
+    // A constant lets the compiler discard unused application chrome while
+    // retaining the native document, renderer, commands and control protocol.
+    cfg!(target_arch = "wasm32")
 }
 '''
 
