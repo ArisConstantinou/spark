@@ -4,6 +4,7 @@ import {pendingCadFile,consumeCadFile} from './cad-transfer.js';
 import {setupDesktop} from './desktop-ui.js';
 import {desktop} from './platform.js';
 import {waitForCadEngine,showCadStartupFailure} from './cad-startup.js';
+import {createCadMutation} from './cad-transport.js';
 // A new viewport API must not reuse a cached index from an older component.
 const CAD_CORE='8f5d9e79e013739c116b3678f51f1f77c850760b';
 import {escape as esc} from './model.js';
@@ -21,7 +22,7 @@ function confirmAction(message,{title='Continue?',confirmLabel='Continue'}={}){r
 function dirty(){return pendingDownloads.size>0||(presentation?.dirty?presentation.dirty(state):!!state?.documents?.some(d=>d.dirty));}
 function update(){if(!unifiedWeb)$('#studio-document').hidden=false;const active=state?.documents?.find(d=>d.id===state.document_id),notice=!!state?.modal;$('#studio-document').textContent=presentation?.name?.(state)||importNames.get(active?.id)||active?.path?.split(/[\\/]/).at(-1)||active?.title||'Native DWG workspace';$('#document-status').textContent=notice?(unifiedWeb?'A CAD notice is available for review':'Review and close the notice inside the CAD editor'):presentation?.status?.(state)|| (active?(active.dirty||pendingDownloads.has(active.id)?'Changes need a saved copy':'Local drawing · '+state.layout):'Files stay on this device');if(api){$('#engine-status').textContent=notice?'Review CAD notice':'Native DWG + DXF';$('#engine-dot').classList.toggle('ready',!notice);}for(const id of ['import','save','fit','history-menu'])$('#'+id).disabled=!api||busy||(notice&&!unifiedWeb)||(unifiedWeb&&!workspaceReady)||(id!=='import'&&(!active||active.start));}
 async function read(request,{timeoutMs=120000}={}){if(!api)throw Error('The CAD engine is still loading.');let reply;try{reply=await api.request(request,{timeoutMs});}catch(error){if(error.message?.startsWith('ocs-control: timed out:'))throw Error('The CAD engine did not finish this operation in time.');throw error;}if(!reply.ok)throw Error(reply.message||reply.error?.message||reply.error||reply.code||'The CAD operation failed.');return reply;}
-async function mutation(request,options){const snapshot=await read({op:'state'});return read({...request,request_id:'spark-'+ ++serial,document_id:snapshot.document_id,revision:snapshot.revision},options);}
+const mutation=createCadMutation(read,()=> 'spark-'+ ++serial);
 async function refresh(options){if(disposed||!api||busy)return;state=await read({op:'state'},options);if(state.hosted_view)initialLayoutPending=false;update();const active=state.documents?.find(d=>d.id===state.document_id);if(initialLayoutPending&&!state.modal&&!layoutJob&&active&&!active.start){initialLayoutPending=false;layoutJob=true;queueMicrotask(async()=>{try{await toggleCanvas();}catch(error){toast('CAD view control failed: '+error.message);}finally{layoutJob=false;}});}}
 async function task(label,fn){if(busy)throw Error('Wait for the current CAD operation.');busy=true;$('#studio-operation').textContent=label;update();try{return await fn();}catch(error){$('#studio-operation').textContent='Operation failed: '+error.message;throw error;}finally{busy=false;await refresh();}}
 function encode(bytes){let text='';for(let i=0;i<bytes.length;i+=32768)text+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(text);}
