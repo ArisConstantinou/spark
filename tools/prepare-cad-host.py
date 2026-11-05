@@ -121,7 +121,49 @@ def transform_worker_handoff(text):
                         "        // The message owns its transferred buffer. Release the worker\n"
                         "        // before allocating the main-thread model.\n"
                         "        finished_worker.terminate();\n" + response)
-    return text[:start] + body + text[end:]
+    return transform_worker_yield(text[:start] + body + text[end:])
+
+
+def transform_worker_yield(source):
+    start=source.index('pub(super) async fn parse_document(')
+    end=source.index('pub(super) async fn sha256_document(',start)
+    body=source[start:end]
+    opening='    let on_message = Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {\n'
+    assert body.count(opening)==1
+    insertion='''        let message_sender = message_sender.clone();
+        let finished_worker = finished_worker.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+'''
+    body=body.replace(opening,opening+insertion,1)
+    anchor='        finished_worker.terminate();\n'
+    assert body.count(anchor)==1
+    pause='''        // terminate() requests worker shutdown. Yield a task so its VM can
+        // release memory before allocating the main-thread document as well.
+        let pause = js_sys::Promise::new(&mut |resolve, _reject| {
+            if let Some(window) = web_sys::window() {
+                if window.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, 0).is_ok() {
+                    return;
+                }
+            }
+            let _ = resolve.call0(&JsValue::UNDEFINED);
+        });
+        let _ = wasm_bindgen_futures::JsFuture::from(pause).await;
+'''
+    body=body.replace(anchor,anchor+pause,1)
+    closing='''        if let Some(sender) = message_sender.borrow_mut().take() {
+            let _ = sender.send(result);
+        }
+    });'''
+    assert body.count(closing)==1
+    ending='''        let pending = message_sender.borrow_mut().take();
+        if let Some(sender) = pending {
+            let _ = sender.send(result);
+        }
+        });
+    });'''
+    body=body.replace(closing,ending,1)
+    assert body.index('finished_worker.terminate();')<body.index('JsFuture::from(pause).await;')<body.index('Uint8Array::new(&value).to_vec();')
+    return source[:start]+body+source[end:]
 
 
 def transform_default_model_camera(text):
