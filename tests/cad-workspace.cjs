@@ -17,6 +17,19 @@ module.exports=async function verifyCadWorkspace({browser,baseUrl,fixture,out,ch
  const cad=async(request,write=false)=>{let timer;console.log('CAD request '+request.op+(request.cmd?' '+request.cmd:''));try{return await Promise.race([page.evaluate(({request,write})=>write?sparkWorkspace.mutate(request):sparkWorkspace.read(request),{request,write}),new Promise((_,reject)=>timer=setTimeout(()=>reject(Error('Native CAD request timed out: '+request.op)),120000))]);}finally{clearTimeout(timer);}};
  await require('./cad-import.cjs')({page,check});
  const supportsInitialView=(await cad({op:'state'})).hosted_initial_layout;
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ const perfBefore=await cad({op:'state'});
+ const perfOff=await cad({op:'spark_perf'});
+ check(perfOff.enabled===false&&typeof perfOff.text==='string'&&perfOff.limit_bytes===524288&&Buffer.byteLength(perfOff.text)<=perfOff.limit_bytes,'Native tracing starts disabled and its bounded snapshot is readable');
+ await cad({op:'spark_perf_set',enabled:true});
+ check((await cad({op:'spark_perf'})).enabled===true,'Native tracing can be enabled independently of the hidden vendor HUD');
+ const badPerf=await cad({op:'spark_perf_set',enabled:'yes'}).then(()=>false,error=>/enabled must be a boolean/.test(error.message));
+ check(badPerf&&(await cad({op:'spark_perf'})).enabled===true,'Malformed tracing configuration is rejected without changing the existing setting');
+ await cad({op:'spark_perf_set',enabled:false});
+ const perfAfter=await cad({op:'state'});
+ check((await cad({op:'spark_perf'})).enabled===false,'Native tracing can be disabled before ordinary drawing acceptance');
+ check(Number.isFinite(perfBefore.revision)&&['document_id','revision','geometry_revision','camera_revision','layout','command','modal'].every(key=>JSON.stringify(perfBefore[key])===JSON.stringify(perfAfter[key]))&&JSON.stringify(perfBefore.documents.map(d=>[d.id,d.start]))===JSON.stringify(perfAfter.documents.map(d=>[d.id,d.start])),'Tracing configuration and snapshots preserve document identity, geometry, camera, command and modal state');
+
  if(supportsInitialView)await page.evaluate(()=>{
   const api=document.querySelector('#cad-frame').contentWindow.ocsControl;
   const request=api.request.bind(api);
