@@ -148,6 +148,65 @@ def transform_default_model_camera(text):
     return text[:start] + body + text[end:]
 
 
+def transform_control_notifications(text):
+    anchor = 'static WEB_TICKET: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);'
+    notify = '''
+
+#[cfg(target_arch = "wasm32")]
+static SPARK_WEB_PENDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+#[cfg(target_arch = "wasm32")]
+static SPARK_WEB_WAKER: iced::futures::task::AtomicWaker = iced::futures::task::AtomicWaker::new();
+
+#[cfg(target_arch = "wasm32")]
+fn spark_web_notify() {
+    SPARK_WEB_PENDING.store(true, std::sync::atomic::Ordering::Release);
+    SPARK_WEB_WAKER.wake();
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(super) fn spark_web_subscription() -> iced::Subscription<super::Message> {
+    fn events() -> impl iced::futures::Stream<Item = super::Message> {
+        iced::futures::stream::poll_fn(|cx| {
+            SPARK_WEB_WAKER.register(cx.waker());
+            if SPARK_WEB_PENDING.swap(false, std::sync::atomic::Ordering::AcqRel) {
+                std::task::Poll::Ready(Some(super::Message::PollWebControl))
+            } else {
+                std::task::Poll::Pending
+            }
+        })
+    }
+    iced::Subscription::run(events)
+}
+'''
+    text = replace_once(text, anchor, anchor + notify)
+    text = replace_once(text, '        queue.push_back((id.clone(), value));', '        queue.push_back((id.clone(), value));\n        drop(queue);\n        spark_web_notify();')
+    text = replace_once(text, '    let (id, request) = WEB_QUEUE.lock().unwrap().pop_front()?;', '''    let (id, request) = {
+        let mut queue = WEB_QUEUE.lock().unwrap();
+        let next = queue.pop_front()?;
+        let more = !queue.is_empty();
+        drop(queue);
+        if more { spark_web_notify(); }
+        next
+    };''')
+    start = text.index('"capabilities":["spark_symbol_place",')
+    end = text.index(']', start) + 1
+    current = text[start:end]
+    values = current[len('"capabilities":'):]
+    replacement = ('"capabilities":({let mut values = vec!' + values
+                   + '; if cfg!(target_arch = "wasm32") { values.push("web_control_notify"); } values})')
+    return replace_once(text, current, replacement)
+
+def transform_control_subscription(text):
+    return replace_once(text, '''        let control = iced::time::every(std::time::Duration::from_millis(50))
+            .map(|_| Message::PollWebControl);''', '''        // Explicit host requests wake the existing bounded FIFO immediately.
+        // Keep the old timer for dropped files and other periodic web work.
+        let control = iced::Subscription::batch([
+            super::control::spark_web_subscription(),
+            iced::time::every(std::time::Duration::from_millis(50))
+                .map(|_| Message::PollWebControl),
+        ]);''')
+
+
 def transform_worker(text):
     return replace_once(text,
                         '  target/wasm32-unknown-unknown/release/ocs_web_worker.wasm',
@@ -221,7 +280,7 @@ def prepare(root):
     if actual != UPSTREAM:
         raise ValueError("The CAD source must match pinned commit " + UPSTREAM)
     changes = {}
-    for relative, transform in zip(FILES, (transform_view, transform_control, transform_worker, transform_entities, transform_recent, transform_autosave, transform_cache_notice, transform_persistence_request, transform_open_view, transform_worker_handoff, transform_default_model_camera, transform_hatch_texture)):
+    for relative, transform in zip(FILES, (lambda text: transform_control_subscription(transform_view(text)), lambda text: transform_control_notifications(transform_control(text)), transform_worker, transform_entities, transform_recent, transform_autosave, transform_cache_notice, transform_persistence_request, transform_open_view, transform_worker_handoff, transform_default_model_camera, transform_hatch_texture)):
         path = root / relative
         original = path.read_bytes()
         digest = hashlib.sha256(original).hexdigest()
